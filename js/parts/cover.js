@@ -1,58 +1,55 @@
-// Front cover: spine flap + living-hinge band + lid panel, all one flat piece.
-// Layout along +y:  [spineSpacing band, screws] | [hingeLength band, slits] | [outerD lid].
-// Width along +x: outerW (matches base footprint).
+// Front cover (book-style): matches the case footprint exactly. Within that footprint:
+//   [ spine flap, width = spineSpacing ] | [ hinge band, width = hingeLength ] | [ lid panel, rest ]
+// Height = outerD(base) (along the spine).
+// The spine flap is screwed to the spine of the case; the hinge band lets the lid swing open.
 
 import { createBedSvg, kerfRect, kerfCircle, spineScrewPositions, addGrainOverlay, el } from "../svg.js";
 import { outerFootprint, PART_ORIGIN } from "./geometry.js";
 import { generateHinge } from "../hinge.js";
 
 export function buildCover(params, { preview = true } = {}) {
-  const { svg, cut, grain } = createBedSvg(params, { preview });
   const { outerW, outerD } = outerFootprint(params);
+  const { svg, cut, grain } = createBedSvg(params, { preview, partNaturalHeight: outerD });
   const { x: ox, y: oy } = PART_ORIGIN;
 
-  const coverH = params.spineSpacing + params.hingeLength + outerD;
+  const coverW = outerW;
 
-  // Outer perimeter
-  cut.appendChild(kerfRect(ox, oy, outerW, coverH, params.kerf, "outer"));
+  // Outer perimeter (same footprint as the case)
+  cut.appendChild(kerfRect(ox, oy, coverW, outerD, params.kerf, "outer"));
 
-  // Chicago screws in the spine flap (top band of height = spineSpacing)
+  // Chicago screws in the spine flap (leftmost band, width = spineSpacing)
   for (const { cx, cy } of spineScrewPositions({
     originX: ox, originY: oy,
-    outerLong: outerW, outerShort: params.spineSpacing,
+    outerLong: params.spineSpacing, outerShort: outerD,
     spineOffset: params.chicagoScrewSpineOffset,
     count: params.chicagoScrewCount,
-    spineAxis: "long",
+    spineAxis: "left",
   })) {
     cut.appendChild(kerfCircle(cx, cy, params.chicagoScrewDiameter / 2, params.kerf, "hole"));
   }
 
-  // Hinge band
+  // Hinge band: vertical strip between spine flap and lid. Bend axis is vertical (along y),
+  // so slits should run parallel to y. The hinge module places slits along its area's longer axis.
   const hingeArea = {
-    x: ox,
-    y: oy + params.spineSpacing,
-    w: outerW,
-    h: params.hingeLength,
+    x: ox + params.spineSpacing,
+    y: oy,
+    w: params.hingeLength,
+    h: outerD,
   };
   for (const node of generateHinge(params.hingeStyle, hingeArea, params)) {
     cut.appendChild(node);
   }
 
   if (preview) {
-    // Light dashed guides showing the hinge band boundaries (preview only)
-    cut.appendChild(el("line", {
-      x1: ox, y1: oy + params.spineSpacing, x2: ox + outerW, y2: oy + params.spineSpacing,
-      stroke: "#bbbbbb", "stroke-width": 0.3, "stroke-dasharray": "1 1", class: "guide",
-    }));
-    cut.appendChild(el("line", {
-      x1: ox, y1: oy + params.spineSpacing + params.hingeLength, x2: ox + outerW, y2: oy + params.spineSpacing + params.hingeLength,
-      stroke: "#bbbbbb", "stroke-width": 0.3, "stroke-dasharray": "1 1", class: "guide",
-    }));
+    // Dashed guides marking the spine-flap / hinge / lid boundaries
+    const guideStyle = { stroke: "#bbbbbb", "stroke-width": 0.3, "stroke-dasharray": "1 1", class: "guide" };
+    cut.appendChild(el("line", { x1: ox + params.spineSpacing, y1: oy, x2: ox + params.spineSpacing, y2: oy + outerD, ...guideStyle }));
+    cut.appendChild(el("line", { x1: ox + params.spineSpacing + params.hingeLength, y1: oy, x2: ox + params.spineSpacing + params.hingeLength, y2: oy + outerD, ...guideStyle }));
   }
 
   if (preview && params.showGrain) {
-    // Grain must run parallel to the hinge slits, i.e. along +y (across the hinge).
-    addGrainOverlay(grain, { x: ox, y: oy, w: outerW, h: coverH, axis: "y" });
+    // Grain runs along the slit direction = vertical (along y)
+    addGrainOverlay(grain, { x: ox, y: oy, w: coverW, h: outerD, axis: "y" });
   }
 
   return { name: "front-cover", svg };

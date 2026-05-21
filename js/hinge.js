@@ -1,6 +1,9 @@
 // Pluggable living-hinge pattern registry.
-// Each pattern is a function (area, params) -> array of SVG element nodes (slit lines/rects).
-// The hinge "long axis" runs in +x; slits run perpendicular (along +y).
+// Convention: area = { x, y, w, h }
+//   - w (across) is the SHORT dimension of the hinge band (perpendicular to the bend axis)
+//   - h (along)  is the LONG  dimension (along the bend axis)
+// Slits run along the band's long axis (+y in this convention),
+// arranged in columns stacked across the band (+x).
 
 import { el } from "./svg.js";
 
@@ -20,44 +23,40 @@ export function generateHinge(name, area, params) {
   return fn(area, params);
 }
 
-// Classic straight-slit lattice. Slits run across the hinge (perpendicular to the bend axis).
-// area = { x, y, w, h } -- w is along the hinge long axis, h is across (the bend direction).
+// Classic staggered straight-cut lattice.
+// Column A (even columns): one centered long slit of length `slitLen` along +y.
+// Column B (odd columns):  two half-length slits split by a gap in the middle,
+//                          extending all the way to the band's top/bottom edges
+//                          so material can flex.
 registerHinge("straightLattice", (area, params) => {
-  const nodes = [];
   const { x, y, w, h } = area;
   const slitLen = Math.min(params.hingeSlitLength, h * 0.95);
-  const rowSpacing = params.hingeRowSpacing;
+  const colSpacing = params.hingeRowSpacing;
   const gap = params.hingeSlitGap;
 
-  // Two row types, offset for staggered pattern:
-  //   Row A: full-length slits centered vertically with margins.
-  //   Row B: half-length slits at top + half-length at bottom, leaving a gap in middle.
-  const rowCount = Math.max(1, Math.floor(w / rowSpacing));
-  const actualSpacing = w / rowCount;
+  const colCount = Math.max(1, Math.floor(w / colSpacing));
+  const actualSpacing = w / colCount;
+  const nodes = [];
 
-  for (let i = 0; i < rowCount; i++) {
+  for (let i = 0; i < colCount; i++) {
     const cx = x + actualSpacing * (i + 0.5);
     const isA = i % 2 === 0;
 
     if (isA) {
-      // Single centered slit
       const y0 = y + (h - slitLen) / 2;
-      nodes.push(slit(cx, y0, cx, y0 + slitLen, params));
+      nodes.push(line(cx, y0, cx, y0 + slitLen));
     } else {
-      // Two slits: top and bottom, each (slitLen - gap)/2 long
       const halfLen = (slitLen - gap) / 2;
-      const yTop0 = y + (h - slitLen) / 2;
-      const yTop1 = yTop0 + halfLen;
+      const yTop1 = y + (h - slitLen) / 2 + halfLen;
       const yBot0 = yTop1 + gap;
-      const yBot1 = yBot0 + halfLen;
-      // Also extend the staggered slits to the edges so the hinge actually flexes
-      nodes.push(slit(cx, y, cx, yTop1, params));
-      nodes.push(slit(cx, yBot0, cx, y + h, params));
+      // Staggered columns reach the band's top/bottom edges
+      nodes.push(line(cx, y, cx, yTop1));
+      nodes.push(line(cx, yBot0, cx, y + h));
     }
   }
   return nodes;
 });
 
-function slit(x1, y1, x2, y2) {
+function line(x1, y1, x2, y2) {
   return el("line", { x1, y1, x2, y2 });
 }

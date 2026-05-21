@@ -8,11 +8,18 @@
 <body>
   <header class="topbar">
     <h1>Paper Holder Generator</h1>
+    <div class="topbar-group">
+      <label>Profile</label>
+      <select id="profileSelect"></select>
+      <button id="saveAsBtn">Save As</button>
+      <button id="deleteBtn">Delete</button>
+      <button id="resetBtn">Reset</button>
+    </div>
     <label class="topbar-item">
       <input type="checkbox" id="grainToggle" />
       Show grain direction
     </label>
-    <button id="downloadAll">Download All</button>
+    <button id="downloadAll">Download All (zip)</button>
   </header>
   <main>
     <aside id="form" class="sidebar"></aside>

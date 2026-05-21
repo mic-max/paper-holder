@@ -13,7 +13,11 @@ export function el(name, attrs = {}) {
 
 // Bed-sized SVG document. Returns { svg, cut, etch, grain } groups.
 // Stroke widths/colors are set on the groups so the export hook can swap them.
-export function createBedSvg(params, { preview = true } = {}) {
+//
+// `partNaturalHeight` is the height of the part in natural (un-rotated) coordinates
+// — required when `params.rotateOnBed` is true so we can compute the 90° rotation transform
+// that lays the part's tall axis along the bed's wide axis.
+export function createBedSvg(params, { preview = true, partNaturalHeight = 0 } = {}) {
   const strokeW = preview ? params.previewStrokeWidth : params.exportStrokeWidth;
   const svg = el("svg", {
     xmlns: SVG_NS,
@@ -33,6 +37,16 @@ export function createBedSvg(params, { preview = true } = {}) {
     svg.appendChild(bed);
   }
 
+  // Optional 90° rotation so the part lands with its tall axis along the bed's wide axis.
+  // Math: rotate(90) maps (x,y)->(-y,x); translate(partHeight + 2*originX, 0) brings the rotated
+  // bbox back into positive coords with the original PART_ORIGIN-style top-left margin preserved.
+  const rotate = params.rotateOnBed !== false;
+  const wrapperAttrs = rotate
+    ? { class: "bed-content", transform: `translate(${partNaturalHeight + 20}, 0) rotate(90)` }
+    : { class: "bed-content" };
+  const wrapper = el("g", wrapperAttrs);
+  svg.appendChild(wrapper);
+
   const cut = el("g", {
     class: "cut",
     fill: "none",
@@ -47,9 +61,9 @@ export function createBedSvg(params, { preview = true } = {}) {
   });
   const grain = el("g", { class: "grain-overlay" });
 
-  svg.appendChild(cut);
-  svg.appendChild(etch);
-  svg.appendChild(grain);
+  wrapper.appendChild(cut);
+  wrapper.appendChild(etch);
+  wrapper.appendChild(grain);
 
   return { svg, cut, etch, grain };
 }

@@ -1,18 +1,45 @@
-import { defaults, schema } from "./params.js";
+import { schema } from "./params.js";
 import { buildBack } from "./parts/back.js";
 import { buildCover } from "./parts/cover.js";
 import { buildInteriorLayer } from "./parts/interior.js";
 import { getHingeNames } from "./hinge.js";
-import { downloadPart, downloadAll } from "./download.js";
+import { downloadPart, downloadAllZipped } from "./download.js";
+import {
+  loadState, saveActive, saveAs, selectProfile, deleteProfile, resetActiveToDefaults,
+} from "./profiles.js";
 
-const params = { ...defaults };
+let params;          // live params object (auto-saved into active profile on change)
+let activeName;      // active profile name
+let inputs = {};     // key -> input element (so we can refresh values on profile switch)
+
 const formEl = document.getElementById("form");
 const previewsEl = document.getElementById("previews");
 const grainToggle = document.getElementById("grainToggle");
 const downloadAllBtn = document.getElementById("downloadAll");
+const profileSelect = document.getElementById("profileSelect");
+const saveAsBtn = document.getElementById("saveAsBtn");
+const deleteBtn = document.getElementById("deleteBtn");
+const resetBtn = document.getElementById("resetBtn");
+
+function repopulateProfileSelect(names, active) {
+  profileSelect.innerHTML = "";
+  for (const n of names) {
+    const opt = document.createElement("option");
+    opt.value = n; opt.textContent = n;
+    profileSelect.appendChild(opt);
+  }
+  profileSelect.value = active;
+}
 
 function buildForm() {
   formEl.innerHTML = "";
+  inputs = {};
+
+  const note = document.createElement("p");
+  note.className = "units-note";
+  note.textContent = "All dimensions in mm.";
+  formEl.appendChild(note);
+
   for (const group of schema) {
     const fs = document.createElement("fieldset");
     const lg = document.createElement("legend");
@@ -22,7 +49,7 @@ function buildForm() {
       const row = document.createElement("label");
       row.className = "row";
       const span = document.createElement("span");
-      span.textContent = item.label + (item.unit ? ` (${item.unit})` : "");
+      span.textContent = item.label;
       row.appendChild(span);
 
       let input;
@@ -39,6 +66,10 @@ function buildForm() {
         input = document.createElement("input");
         input.type = "color";
         input.value = params[item.key];
+      } else if (item.type === "checkbox") {
+        input = document.createElement("input");
+        input.type = "checkbox";
+        input.checked = !!params[item.key];
       } else {
         input = document.createElement("input");
         input.type = "number";
@@ -47,14 +78,24 @@ function buildForm() {
         input.value = params[item.key];
       }
       input.addEventListener("input", () => {
-        const v = input.value;
-        params[item.key] = (input.type === "number") ? Number(v) : v;
+        if (input.type === "checkbox") params[item.key] = input.checked;
+        else if (input.type === "number") params[item.key] = Number(input.value);
+        else params[item.key] = input.value;
+        saveActive(params);
         render();
       });
+      inputs[item.key] = input;
       row.appendChild(input);
       fs.appendChild(row);
     }
     formEl.appendChild(fs);
+  }
+}
+
+function refreshFormValues() {
+  for (const [key, input] of Object.entries(inputs)) {
+    if (input.type === "checkbox") input.checked = !!params[key];
+    else input.value = params[key];
   }
 }
 
@@ -89,7 +130,6 @@ function render() {
 
     const svgWrap = document.createElement("div");
     svgWrap.className = "svg-wrap";
-    // Force on-screen rendering at a manageable size via CSS; the SVG keeps its mm intrinsic size.
     part.svg.removeAttribute("width");
     part.svg.removeAttribute("height");
     svgWrap.appendChild(part.svg);
@@ -99,16 +139,63 @@ function render() {
   }
 }
 
+// --- Initial load ---
+{
+  const state = loadState();
+  params = state.params;
+  activeName = state.activeName;
+  repopulateProfileSelect(state.names, activeName);
+  grainToggle.checked = !!params.showGrain;
+  buildForm();
+  render();
+}
+
+// --- Top-bar handlers ---
+
 grainToggle.addEventListener("change", () => {
   params.showGrain = grainToggle.checked;
+  saveActive(params);
   render();
 });
 
 downloadAllBtn.addEventListener("click", () => {
-  // Rebuild fresh nodes so each download gets its own un-mutated tree.
   const fresh = collectParts();
-  downloadAll(fresh, params);
+  downloadAllZipped(fresh, params);
 });
 
-buildForm();
-render();
+profileSelect.addEventListener("change", () => {
+  const state = selectProfile(profileSelect.value);
+  params = state.params;
+  activeName = state.activeName;
+  grainToggle.checked = !!params.showGrain;
+  refreshFormValues();
+  render();
+});
+
+saveAsBtn.addEventListener("click", () => {
+  const name = window.prompt("New profile name:", "");
+  if (!name) return;
+  const state = saveAs(name, params);
+  activeName = state.activeName;
+  repopulateProfileSelect(state.names, activeName);
+});
+
+deleteBtn.addEventListener("click", () => {
+  if (!window.confirm(`Delete profile "${activeName}"?`)) return;
+  const state = deleteProfile(activeName);
+  if (!state) return;
+  params = state.params;
+  activeName = state.activeName;
+  repopulateProfileSelect(state.names, activeName);
+  grainToggle.checked = !!params.showGrain;
+  refreshFormValues();
+  render();
+});
+
+resetBtn.addEventListener("click", () => {
+  if (!window.confirm(`Reset profile "${activeName}" to built-in defaults?`)) return;
+  params = resetActiveToDefaults();
+  grainToggle.checked = !!params.showGrain;
+  refreshFormValues();
+  render();
+});
