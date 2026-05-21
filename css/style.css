@@ -1,0 +1,39 @@
+* { box-sizing: border-box; }
+body { margin: 0; font-family: system-ui, sans-serif; font-size: 13px; }
+
+.topbar {
+  display: flex; align-items: center; gap: 16px;
+  padding: 8px 16px; background: #222; color: #eee;
+  position: sticky; top: 0; z-index: 10;
+}
+.topbar h1 { font-size: 16px; margin: 0; }
+.topbar-item { display: flex; align-items: center; gap: 4px; }
+.topbar button { padding: 6px 12px; cursor: pointer; }
+
+main { display: flex; min-height: calc(100vh - 44px); }
+
+.sidebar {
+  width: 340px; flex-shrink: 0;
+  padding: 12px; background: #f4f4f4;
+  overflow-y: auto; max-height: calc(100vh - 44px);
+  border-right: 1px solid #ddd;
+}
+.sidebar fieldset {
+  border: 1px solid #ccc; padding: 6px 10px; margin-bottom: 10px; background: #fff;
+}
+.sidebar legend { font-weight: bold; padding: 0 4px; }
+.sidebar .row {
+  display: flex; justify-content: space-between; align-items: center;
+  gap: 8px; margin: 3px 0;
+}
+.sidebar .row span { flex: 1; }
+.sidebar .row input, .sidebar .row select { width: 110px; }
+
+.previews { flex: 1; padding: 12px; overflow-y: auto; max-height: calc(100vh - 44px); }
+.card {
+  background: #fff; border: 1px solid #ddd; margin-bottom: 16px; padding: 8px;
+}
+.card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.card-header h3 { margin: 0; font-size: 14px; }
+.svg-wrap { background: #fafafa; border: 1px dashed #ccc; overflow: auto; }
+.svg-wrap svg { display: block; max-width: 100%; height: auto; }
