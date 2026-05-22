@@ -132,7 +132,13 @@ function render() {
     const header = document.createElement("div");
     header.className = "card-header";
     const title = document.createElement("h3");
+    const w = Number(part.svg.getAttribute("data-natural-width")) || 0;
+    const h = Number(part.svg.getAttribute("data-natural-height")) || 0;
+    const dims = document.createElement("span");
+    dims.className = "card-dims";
+    dims.textContent = ` — ${w.toFixed(1)} × ${h.toFixed(1)} mm`;
     title.textContent = part.name;
+    title.appendChild(dims);
     const dlBtn = document.createElement("button");
     dlBtn.textContent = "Download SVG";
     dlBtn.addEventListener("click", () => downloadPart(part.name, part.svg, params));
