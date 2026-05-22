@@ -30,6 +30,7 @@ export function buildCover(params, { preview = true } = {}) {
     outerLong: params.spineSpacing, outerShort: outerD,
     spineOffset: params.chicagoScrewSpineOffset,
     count: params.chicagoScrewCount,
+    endInset: params.chicagoScrewEndInset,
     spineAxis: "left",
   })) {
     screws.appendChild(kerfCircle(cx, cy, params.chicagoScrewDiameter / 2, params.kerf, "hole"));

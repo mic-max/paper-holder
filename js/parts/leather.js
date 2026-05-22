@@ -39,10 +39,11 @@ export function buildLeatherSpine(params, { preview = true } = {}) {
   const screws = componentGroup(cut, "screws");
 
   const count = Math.max(1, params.chicagoScrewCount);
+  const endInset = params.chicagoScrewEndInset;
+  const span = Math.max(0, leatherLength - 2 * endInset);
   for (let i = 0; i < count; i++) {
     const t = count === 1 ? 0.5 : i / (count - 1);
-    const tt = 0.15 + 0.7 * t; // same 15% inset from each end as the case
-    const cy = oy + leatherLength * tt;
+    const cy = oy + endInset + span * t;
     screws.appendChild(kerfCircle(ox + flapAx, cy, holeR, params.kerf, "hole"));
     screws.appendChild(kerfCircle(ox + flapBx, cy, holeR, params.kerf, "hole"));
   }

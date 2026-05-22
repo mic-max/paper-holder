@@ -33,6 +33,7 @@ export const defaults = {
   chicagoScrewCount: 3,
   chicagoScrewDiameter: 5,
   chicagoScrewSpineOffset: 8,
+  chicagoScrewEndInset: 50,
 
   // Closure: round magnets nestle in the top-right & bottom-right rounded corners.
   magnetDiameter: 12,
@@ -90,6 +91,7 @@ export const schema = [
     { key: "chicagoScrewCount", label: "Chicago screw count", type: "number", step: 1, min: 1 },
     { key: "chicagoScrewDiameter", label: "Screw diameter", unit: "mm", type: "number", step: 0.1, min: 0.5 },
     { key: "chicagoScrewSpineOffset", label: "Screw spine offset", unit: "mm", type: "number", step: 0.5, min: 0 },
+    { key: "chicagoScrewEndInset", label: "End screw inset from top/bottom", unit: "mm", type: "number", step: 1, min: 0 },
   ]},
   { group: "Closure", component: "magnets", items: [
     { key: "magnetDiameter", label: "Magnet diameter", unit: "mm", type: "number", step: 0.5, min: 1 },

@@ -24,6 +24,7 @@ export function buildBack(params, { preview = true } = {}) {
     outerLong: outerW, outerShort: outerD,
     spineOffset: params.chicagoScrewSpineOffset,
     count: params.chicagoScrewCount,
+    endInset: params.chicagoScrewEndInset,
     spineAxis: "left",
   })) {
     screws.appendChild(kerfCircle(cx, cy, params.chicagoScrewDiameter / 2, params.kerf, "hole"));

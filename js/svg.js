@@ -182,22 +182,23 @@ export function addGrainOverlay(grainGroup, { x, y, w, h, axis = "x" }) {
 }
 
 // Place screw holes in a row along the spine. `spineAxis` is the axis the screws are arrayed along.
+// `endInset` fixes the distance of the first and last screw from the top/bottom (or left/right)
+// edge; intermediate screws are distributed linearly, so the middle of an odd-count run stays
+// centered on the enclosure regardless of endInset.
 // Returns array of {cx, cy}.
-export function spineScrewPositions({ originX, originY, outerLong, outerShort, spineOffset, count, spineAxis = "long" }) {
+export function spineScrewPositions({ originX, originY, outerLong, outerShort, spineOffset, count, endInset = 0, spineAxis = "long" }) {
   const positions = [];
   if (spineAxis === "long") {
-    // Spine runs along the long axis (e.g. horizontal); screws spread along it, fixed offset from the spine edge.
+    const span = Math.max(0, outerLong - 2 * endInset);
     for (let i = 0; i < count; i++) {
       const t = count === 1 ? 0.5 : i / (count - 1);
-      // Inset 15% from each end so screws aren't right on the corner.
-      const tt = 0.15 + 0.7 * t;
-      positions.push({ cx: originX + outerLong * tt, cy: originY + spineOffset });
+      positions.push({ cx: originX + endInset + span * t, cy: originY + spineOffset });
     }
   } else {
+    const span = Math.max(0, outerShort - 2 * endInset);
     for (let i = 0; i < count; i++) {
       const t = count === 1 ? 0.5 : i / (count - 1);
-      const tt = 0.15 + 0.7 * t;
-      positions.push({ cx: originX + spineOffset, cy: originY + outerShort * tt });
+      positions.push({ cx: originX + spineOffset, cy: originY + endInset + span * t });
     }
   }
   return positions;
