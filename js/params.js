@@ -20,7 +20,8 @@ export const defaults = {
   wallThickness: 8,
   openingBufferWidth: 18,
   openingCornerRadius: 10,
-  thumbReliefRadius: 12,
+  thumbReliefHeight: 50,
+  thumbReliefDepth: 8,
   spineCornerRadius: 1.5,
 
   // Pen pockets (two colinear, vertical, centered in the right buffer zone)
@@ -78,7 +79,8 @@ export const schema = [
     { key: "wallThickness", label: "Wall thickness (spine/top/bottom)", unit: "mm", type: "number", step: 0.5, min: 1 },
     { key: "openingBufferWidth", label: "Opening buffer width (right wall)", unit: "mm", type: "number", step: 0.5, min: 1 },
     { key: "openingCornerRadius", label: "Opening corner radius", unit: "mm", type: "number", step: 0.5, min: 0 },
-    { key: "thumbReliefRadius", label: "Thumb relief radius", unit: "mm", type: "number", step: 0.5, min: 0 },
+    { key: "thumbReliefHeight", label: "Thumb relief height (along edge)", unit: "mm", type: "number", step: 1, min: 0 },
+    { key: "thumbReliefDepth", label: "Thumb relief depth (into part)", unit: "mm", type: "number", step: 0.5, min: 0 },
     { key: "spineCornerRadius", label: "Spine corner roundover", unit: "mm", type: "number", step: 0.1, min: 0 },
   ]},
   { group: "Pens", component: "pens", items: [

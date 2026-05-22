@@ -91,9 +91,11 @@ export function kerfRoundedRect(x, y, w, h, kerf, role = "outer", corners = {}) 
   return el("path", { d: seg.join(" ") });
 }
 
-// Like kerfRoundedRect, but also bites a semicircular "thumb relief" out of the
-// right edge (at the vertical center). Used by interior layers. If
-// `thumbReliefRadius` is 0 the output is equivalent to kerfRoundedRect.
+// Like kerfRoundedRect, but also bites a circular-arc "thumb relief" out of the
+// right edge (at the vertical center). The relief is defined by a chord length
+// `thumbReliefHeight` (along the edge) and a sagitta `thumbReliefDepth` (into the
+// part); any non-circular shape is fine because we compute the supporting radius
+// `r = (h^2 + 4d^2) / (8d)`. If either dimension is 0 the relief is skipped.
 export function caseOuterPath(x, y, w, h, kerf, role = "outer", opts = {}) {
   const k = role === "outer" ? kerf / 2 : role === "hole" ? -kerf / 2 : 0;
   const X = x - k, Y = y - k, W = w + 2 * k, H = h + 2 * k;
@@ -101,21 +103,27 @@ export function caseOuterPath(x, y, w, h, kerf, role = "outer", opts = {}) {
   const clamp = (r) => Math.max(0, Math.min(r || 0, maxR));
   const tl = clamp(opts.tl), tr = clamp(opts.tr);
   const br = clamp(opts.br), bl = clamp(opts.bl);
-  const tRaw = opts.thumbReliefRadius || 0;
-  // The thumb relief sits on the right edge between the rounded corners.
-  // Clamp it so it doesn't collide with the corners or escape the edge.
-  const tMax = Math.max(0, (H - tr - br) / 2 - 1);
-  const t = Math.max(0, Math.min(tRaw, tMax));
+
+  // Thumb relief on the right edge, centered vertically.
+  const hMaxChord = Math.max(0, H - tr - br - 2);
+  const reliefH = Math.max(0, Math.min(opts.thumbReliefHeight || 0, hMaxChord));
+  const reliefD = Math.max(0, Math.min(opts.thumbReliefDepth || 0, W - 1));
   const cy = Y + H / 2;
+  const reliefOn = reliefH > 0 && reliefD > 0;
+  // Circle through the chord endpoints and the deepest interior point:
+  // radius = (chord^2 + 4*sagitta^2) / (8*sagitta).
+  const reliefR = reliefOn ? (reliefH * reliefH + 4 * reliefD * reliefD) / (8 * reliefD) : 0;
+  // Long arc (>180°) when the sagitta exceeds half the chord.
+  const reliefLargeArc = reliefD > reliefH / 2 ? 1 : 0;
 
   const seg = [];
   seg.push(`M ${X + tl} ${Y}`);
   seg.push(`L ${X + W - tr} ${Y}`);
   if (tr > 0) seg.push(`A ${tr} ${tr} 0 0 1 ${X + W} ${Y + tr}`);
-  if (t > 0) {
-    seg.push(`L ${X + W} ${cy - t}`);
-    // Concave arc INTO the part (sweep-flag 0) so the relief is a bite, not a bump.
-    seg.push(`A ${t} ${t} 0 0 0 ${X + W} ${cy + t}`);
+  if (reliefOn) {
+    seg.push(`L ${X + W} ${cy - reliefH / 2}`);
+    // sweep-flag 0 = CCW (visually) so the arc bulges left, biting INTO the part.
+    seg.push(`A ${reliefR} ${reliefR} 0 ${reliefLargeArc} 0 ${X + W} ${cy + reliefH / 2}`);
   }
   seg.push(`L ${X + W} ${Y + H - br}`);
   if (br > 0) seg.push(`A ${br} ${br} 0 0 1 ${X + W - br} ${Y + H}`);

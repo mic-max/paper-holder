@@ -24,7 +24,8 @@ export function buildInteriorLayer(params, layerIndex, { preview = true } = {}) 
   componentGroup(cut, "perimeter").appendChild(
     caseOuterPath(ox, oy, outerW, outerD, params.kerf, "outer", {
       tr: r, br: r, tl: sr, bl: sr,
-      thumbReliefRadius: params.thumbReliefRadius,
+      thumbReliefHeight: params.thumbReliefHeight,
+      thumbReliefDepth: params.thumbReliefDepth,
     })
   );
 
