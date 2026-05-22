@@ -1,5 +1,7 @@
 // SVG primitives and document wrapper. All units are mm.
 
+import { COMPONENT_COLORS } from "./params.js";
+
 export const SVG_NS = "http://www.w3.org/2000/svg";
 
 export function el(name, attrs = {}) {
@@ -11,40 +13,27 @@ export function el(name, attrs = {}) {
   return node;
 }
 
-// Bed-sized SVG document. Returns { svg, cut, etch, grain } groups.
-// Stroke widths/colors are set on the groups so the export hook can swap them.
-//
-// `partNaturalHeight` is the height of the part in natural (un-rotated) coordinates
-// — required when `params.rotateOnBed` is true so we can compute the 90° rotation transform
-// that lays the part's tall axis along the bed's wide axis.
-export function createBedSvg(params, { preview = true, partNaturalHeight = 0 } = {}) {
+// SVG document for a part. Always built in NATURAL (un-rotated) coordinates with the
+// part placed at PART_ORIGIN. The on-screen preview uses a viewBox cropped to the
+// part's bounding box (so small parts aren't dwarfed by the bed). The export pipeline
+// (download.js) re-sizes the root to the bed dimensions and applies the 90° rotation
+// when `params.rotateOnBed` is on. The natural dimensions are stashed as data-* attrs
+// so the export step can compute the rotation translate.
+export function createBedSvg(params, { preview = true, partNaturalWidth = 0, partNaturalHeight = 0 } = {}) {
   const strokeW = preview ? params.previewStrokeWidth : params.exportStrokeWidth;
+  // Natural viewBox: PART_ORIGIN margin on top/left, same margin on bottom/right.
+  const ORIGIN = 10;
+  const vbW = partNaturalWidth + 2 * ORIGIN;
+  const vbH = partNaturalHeight + 2 * ORIGIN;
   const svg = el("svg", {
     xmlns: SVG_NS,
-    width: `${params.bedWidth}mm`,
-    height: `${params.bedDepth}mm`,
-    viewBox: `0 0 ${params.bedWidth} ${params.bedDepth}`,
+    viewBox: `0 0 ${vbW} ${vbH}`,
+    "data-natural-width": partNaturalWidth,
+    "data-natural-height": partNaturalHeight,
   });
 
-  // Bed boundary (preview-only visual; stripped on export).
-  if (preview) {
-    const bed = el("rect", {
-      class: "bed-outline",
-      x: 0, y: 0,
-      width: params.bedWidth, height: params.bedDepth,
-      fill: "none", stroke: "#cccccc", "stroke-width": 0.5, "stroke-dasharray": "2 2",
-    });
-    svg.appendChild(bed);
-  }
-
-  // Optional 90° rotation so the part lands with its tall axis along the bed's wide axis.
-  // Math: rotate(90) maps (x,y)->(-y,x); translate(partHeight + 2*originX, 0) brings the rotated
-  // bbox back into positive coords with the original PART_ORIGIN-style top-left margin preserved.
-  const rotate = params.rotateOnBed !== false;
-  const wrapperAttrs = rotate
-    ? { class: "bed-content", transform: `translate(${partNaturalHeight + 20}, 0) rotate(90)` }
-    : { class: "bed-content" };
-  const wrapper = el("g", wrapperAttrs);
+  // bed-content wrapper exists for symmetry with export; preview leaves it un-transformed.
+  const wrapper = el("g", { class: "bed-content" });
   svg.appendChild(wrapper);
 
   const cut = el("g", {
@@ -76,6 +65,81 @@ export function kerfRect(x, y, w, h, kerf, role = "outer") {
     x: x - k, y: y - k,
     width: w + 2 * k, height: h + 2 * k,
   });
+}
+
+// Kerf-compensated rectangle with per-corner radii.
+// corners = { tl, tr, br, bl } in mm; 0 (default) means a square corner.
+// Output is an SVG <path> so individual corners can be rounded.
+export function kerfRoundedRect(x, y, w, h, kerf, role = "outer", corners = {}) {
+  const k = role === "outer" ? kerf / 2 : role === "hole" ? -kerf / 2 : 0;
+  const X = x - k, Y = y - k, W = w + 2 * k, H = h + 2 * k;
+  const maxR = Math.min(W, H) / 2;
+  const clamp = (r) => Math.max(0, Math.min(r || 0, maxR));
+  const tl = clamp(corners.tl), tr = clamp(corners.tr);
+  const br = clamp(corners.br), bl = clamp(corners.bl);
+  const seg = [];
+  seg.push(`M ${X + tl} ${Y}`);
+  seg.push(`L ${X + W - tr} ${Y}`);
+  if (tr > 0) seg.push(`A ${tr} ${tr} 0 0 1 ${X + W} ${Y + tr}`);
+  seg.push(`L ${X + W} ${Y + H - br}`);
+  if (br > 0) seg.push(`A ${br} ${br} 0 0 1 ${X + W - br} ${Y + H}`);
+  seg.push(`L ${X + bl} ${Y + H}`);
+  if (bl > 0) seg.push(`A ${bl} ${bl} 0 0 1 ${X} ${Y + H - bl}`);
+  seg.push(`L ${X} ${Y + tl}`);
+  if (tl > 0) seg.push(`A ${tl} ${tl} 0 0 1 ${X + tl} ${Y}`);
+  seg.push("Z");
+  return el("path", { d: seg.join(" ") });
+}
+
+// Like kerfRoundedRect, but also bites a semicircular "thumb relief" out of the
+// right edge (at the vertical center). Used by interior layers. If
+// `thumbReliefRadius` is 0 the output is equivalent to kerfRoundedRect.
+export function caseOuterPath(x, y, w, h, kerf, role = "outer", opts = {}) {
+  const k = role === "outer" ? kerf / 2 : role === "hole" ? -kerf / 2 : 0;
+  const X = x - k, Y = y - k, W = w + 2 * k, H = h + 2 * k;
+  const maxR = Math.min(W, H) / 2;
+  const clamp = (r) => Math.max(0, Math.min(r || 0, maxR));
+  const tl = clamp(opts.tl), tr = clamp(opts.tr);
+  const br = clamp(opts.br), bl = clamp(opts.bl);
+  const tRaw = opts.thumbReliefRadius || 0;
+  // The thumb relief sits on the right edge between the rounded corners.
+  // Clamp it so it doesn't collide with the corners or escape the edge.
+  const tMax = Math.max(0, (H - tr - br) / 2 - 1);
+  const t = Math.max(0, Math.min(tRaw, tMax));
+  const cy = Y + H / 2;
+
+  const seg = [];
+  seg.push(`M ${X + tl} ${Y}`);
+  seg.push(`L ${X + W - tr} ${Y}`);
+  if (tr > 0) seg.push(`A ${tr} ${tr} 0 0 1 ${X + W} ${Y + tr}`);
+  if (t > 0) {
+    seg.push(`L ${X + W} ${cy - t}`);
+    // Concave arc INTO the part (sweep-flag 0) so the relief is a bite, not a bump.
+    seg.push(`A ${t} ${t} 0 0 0 ${X + W} ${cy + t}`);
+  }
+  seg.push(`L ${X + W} ${Y + H - br}`);
+  if (br > 0) seg.push(`A ${br} ${br} 0 0 1 ${X + W - br} ${Y + H}`);
+  seg.push(`L ${X + bl} ${Y + H}`);
+  if (bl > 0) seg.push(`A ${bl} ${bl} 0 0 1 ${X} ${Y + H - bl}`);
+  seg.push(`L ${X} ${Y + tl}`);
+  if (tl > 0) seg.push(`A ${tl} ${tl} 0 0 1 ${X + tl} ${Y}`);
+  seg.push("Z");
+  return el("path", { d: seg.join(" ") });
+}
+
+// Get-or-create a per-component subgroup inside the main cut group.
+// The subgroup stroke is set to the preview color for that component; export
+// strips that override so cuts come out in `params.cutColor`.
+export function componentGroup(parentCut, component) {
+  let g = parentCut.querySelector(`g[data-component="${component}"]`);
+  if (!g) {
+    g = el("g", {
+      "data-component": component,
+      stroke: COMPONENT_COLORS[component] || COMPONENT_COLORS.perimeter,
+    });
+    parentCut.appendChild(g);
+  }
+  return g;
 }
 
 export function kerfCircle(cx, cy, r, kerf, role = "hole") {

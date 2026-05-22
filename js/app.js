@@ -1,7 +1,8 @@
-import { schema } from "./params.js";
+import { schema, COMPONENT_COLORS } from "./params.js";
 import { buildBack } from "./parts/back.js";
 import { buildCover } from "./parts/cover.js";
 import { buildInteriorLayer } from "./parts/interior.js";
+import { buildLeatherSpine } from "./parts/leather.js";
 import { getHingeNames } from "./hinge.js";
 import { downloadPart, downloadAllZipped } from "./download.js";
 import {
@@ -42,8 +43,18 @@ function buildForm() {
 
   for (const group of schema) {
     const fs = document.createElement("fieldset");
+    const accent = group.component ? COMPONENT_COLORS[group.component] : null;
+    if (accent) {
+      fs.style.borderLeft = `4px solid ${accent}`;
+    }
     const lg = document.createElement("legend");
-    lg.textContent = group.group;
+    if (accent) {
+      const swatch = document.createElement("span");
+      swatch.className = "legend-swatch";
+      swatch.style.background = accent;
+      lg.appendChild(swatch);
+    }
+    lg.appendChild(document.createTextNode(group.group));
     fs.appendChild(lg);
     for (const item of group.items) {
       const row = document.createElement("label");
@@ -101,11 +112,12 @@ function refreshFormValues() {
 
 function collectParts() {
   const parts = [];
-  parts.push(buildBack(params));
-  for (let i = 0; i < params.interiorLayerCount; i++) {
+  parts.push(buildLeatherSpine(params));
+  parts.push(buildCover(params));
+  for (let i = params.interiorLayerCount - 1; i >= 0; i--) {
     parts.push(buildInteriorLayer(params, i));
   }
-  parts.push(buildCover(params));
+  parts.push(buildBack(params));
   return parts;
 }
 
@@ -130,8 +142,6 @@ function render() {
 
     const svgWrap = document.createElement("div");
     svgWrap.className = "svg-wrap";
-    part.svg.removeAttribute("width");
-    part.svg.removeAttribute("height");
     svgWrap.appendChild(part.svg);
     card.appendChild(svgWrap);
 

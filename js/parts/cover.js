@@ -2,22 +2,29 @@
 //   [ spine flap, width = spineSpacing ] | [ hinge band, width = hingeLength ] | [ lid panel, rest ]
 // Height = outerD(base) (along the spine).
 // The spine flap is screwed to the spine of the case; the hinge band lets the lid swing open.
+// The two right-side corners (the opening) are rounded.
 
-import { createBedSvg, kerfRect, kerfCircle, spineScrewPositions, addGrainOverlay, el } from "../svg.js";
+import {
+  createBedSvg, kerfRoundedRect, kerfCircle,
+  spineScrewPositions, addGrainOverlay, componentGroup, el,
+} from "../svg.js";
 import { outerFootprint, PART_ORIGIN } from "./geometry.js";
 import { generateHinge } from "../hinge.js";
 
 export function buildCover(params, { preview = true } = {}) {
   const { outerW, outerD } = outerFootprint(params);
-  const { svg, cut, grain } = createBedSvg(params, { preview, partNaturalHeight: outerD });
+  const { svg, cut, grain } = createBedSvg(params, { preview, partNaturalWidth: outerW, partNaturalHeight: outerD });
   const { x: ox, y: oy } = PART_ORIGIN;
+  const r = params.openingCornerRadius;
+  const sr = params.spineCornerRadius;
 
-  const coverW = outerW;
+  // Outer perimeter (matches case footprint; rounded opening + small spine roundover)
+  componentGroup(cut, "perimeter").appendChild(
+    kerfRoundedRect(ox, oy, outerW, outerD, params.kerf, "outer", { tr: r, br: r, tl: sr, bl: sr })
+  );
 
-  // Outer perimeter (same footprint as the case)
-  cut.appendChild(kerfRect(ox, oy, coverW, outerD, params.kerf, "outer"));
-
-  // Chicago screws in the spine flap (leftmost band, width = spineSpacing)
+  // Chicago screws in the spine flap
+  const screws = componentGroup(cut, "screws");
   for (const { cx, cy } of spineScrewPositions({
     originX: ox, originY: oy,
     outerLong: params.spineSpacing, outerShort: outerD,
@@ -25,11 +32,11 @@ export function buildCover(params, { preview = true } = {}) {
     count: params.chicagoScrewCount,
     spineAxis: "left",
   })) {
-    cut.appendChild(kerfCircle(cx, cy, params.chicagoScrewDiameter / 2, params.kerf, "hole"));
+    screws.appendChild(kerfCircle(cx, cy, params.chicagoScrewDiameter / 2, params.kerf, "hole"));
   }
 
-  // Hinge band: vertical strip between spine flap and lid. Bend axis is vertical (along y),
-  // so slits should run parallel to y. The hinge module places slits along its area's longer axis.
+  // Hinge band: vertical strip between spine flap and lid.
+  const hingeG = componentGroup(cut, "hinge");
   const hingeArea = {
     x: ox + params.spineSpacing,
     y: oy,
@@ -37,7 +44,7 @@ export function buildCover(params, { preview = true } = {}) {
     h: outerD,
   };
   for (const node of generateHinge(params.hingeStyle, hingeArea, params)) {
-    cut.appendChild(node);
+    hingeG.appendChild(node);
   }
 
   if (preview) {
@@ -48,8 +55,7 @@ export function buildCover(params, { preview = true } = {}) {
   }
 
   if (preview && params.showGrain) {
-    // Grain runs along the slit direction = vertical (along y)
-    addGrainOverlay(grain, { x: ox, y: oy, w: coverW, h: outerD, axis: "y" });
+    addGrainOverlay(grain, { x: ox, y: oy, w: outerW, h: outerD, axis: "y" });
   }
 
   return { name: "front-cover", svg };

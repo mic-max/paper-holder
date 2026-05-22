@@ -18,24 +18,25 @@ export const defaults = {
   paperWidth: 216,
   cavityClearance: 2,
   wallThickness: 8,
+  openingBufferWidth: 18,
+  openingCornerRadius: 10,
+  thumbReliefRadius: 12,
+  spineCornerRadius: 1.5,
 
-  // Pens
-  penCount: 2,
-  penDiameter: 12,
-  penChannelInset: 8,
+  // Pen pockets (two colinear, vertical, centered in the right buffer zone)
+  penPocketLength: 150,
+  penPocketWidth: 10,
+  penPocketCornerRadius: 3,
+  penPocketGap: 30,
 
-  // Fasteners / alignment
+  // Fasteners
   chicagoScrewCount: 3,
   chicagoScrewDiameter: 5,
   chicagoScrewSpineOffset: 8,
-  alignmentPinDiameter: 3.175,
-  alignmentPinInsetX: 20,
-  alignmentPinInsetY: 20,
 
-  // Closure (magnet only; steel strip deferred)
-  magnetCount: 2,
-  magnetWidth: 10,
-  magnetHeight: 3,
+  // Closure: round magnets nestle in the top-right & bottom-right rounded corners.
+  magnetDiameter: 12,
+  magnetCornerPadding: 3,
 
   // Cover / hinge
   spineSpacing: 12,
@@ -49,14 +50,16 @@ export const defaults = {
   interiorLayerCount: 3,
   interiorPocketGrowthPerLayer: 0,
 
+  // Leather spine (wraps around the case spine, sandwiched by chicago screws)
+  leatherWrapAllowance: 4,
+
   // UI-only
   showGrain: false,
 };
 
-// Grouped schema for form rendering. Each entry mirrors a key on `defaults`.
 // type: "number" | "select" | "checkbox" | "color"
 export const schema = [
-  { group: "Material & Machine", items: [
+  { group: "Material & Machine", component: null, items: [
     { key: "materialThickness", label: "Material thickness", unit: "mm", type: "number", step: 0.1, min: 0.1 },
     { key: "kerf", label: "Kerf", unit: "mm", type: "number", step: 0.01, min: 0 },
     { key: "bedWidth", label: "Bed width", unit: "mm", type: "number", step: 0.1, min: 10 },
@@ -67,31 +70,32 @@ export const schema = [
     { key: "cutColor", label: "Cut color", type: "color" },
     { key: "etchColor", label: "Etch color", type: "color" },
   ]},
-  { group: "Paper / Cavity", items: [
+  { group: "Paper / Cavity", component: "cavity", items: [
     { key: "paperLength", label: "Paper length", unit: "mm", type: "number", step: 1, min: 10 },
     { key: "paperWidth", label: "Paper width", unit: "mm", type: "number", step: 1, min: 10 },
     { key: "cavityClearance", label: "Cavity clearance", unit: "mm", type: "number", step: 0.5, min: 0 },
-    { key: "wallThickness", label: "Wall thickness", unit: "mm", type: "number", step: 0.5, min: 1 },
+    { key: "wallThickness", label: "Wall thickness (spine/top/bottom)", unit: "mm", type: "number", step: 0.5, min: 1 },
+    { key: "openingBufferWidth", label: "Opening buffer width (right wall)", unit: "mm", type: "number", step: 0.5, min: 1 },
+    { key: "openingCornerRadius", label: "Opening corner radius", unit: "mm", type: "number", step: 0.5, min: 0 },
+    { key: "thumbReliefRadius", label: "Thumb relief radius", unit: "mm", type: "number", step: 0.5, min: 0 },
+    { key: "spineCornerRadius", label: "Spine corner roundover", unit: "mm", type: "number", step: 0.1, min: 0 },
   ]},
-  { group: "Pens", items: [
-    { key: "penCount", label: "Pen count", type: "number", step: 1, min: 0 },
-    { key: "penDiameter", label: "Pen diameter", unit: "mm", type: "number", step: 0.5, min: 1 },
-    { key: "penChannelInset", label: "Pen channel inset", unit: "mm", type: "number", step: 1, min: 0 },
+  { group: "Pens", component: "pens", items: [
+    { key: "penPocketLength", label: "Pen pocket length (each)", unit: "mm", type: "number", step: 1, min: 1 },
+    { key: "penPocketWidth", label: "Pen pocket width", unit: "mm", type: "number", step: 0.5, min: 1 },
+    { key: "penPocketCornerRadius", label: "Pen pocket corner radius", unit: "mm", type: "number", step: 0.1, min: 0 },
+    { key: "penPocketGap", label: "Gap between pen pockets", unit: "mm", type: "number", step: 1, min: 0 },
   ]},
-  { group: "Fasteners / Alignment", items: [
+  { group: "Fasteners", component: "screws", items: [
     { key: "chicagoScrewCount", label: "Chicago screw count", type: "number", step: 1, min: 1 },
     { key: "chicagoScrewDiameter", label: "Screw diameter", unit: "mm", type: "number", step: 0.1, min: 0.5 },
     { key: "chicagoScrewSpineOffset", label: "Screw spine offset", unit: "mm", type: "number", step: 0.5, min: 0 },
-    { key: "alignmentPinDiameter", label: "Alignment pin diameter", unit: "mm", type: "number", step: 0.05, min: 0.5 },
-    { key: "alignmentPinInsetX", label: "Alignment pin inset X", unit: "mm", type: "number", step: 1, min: 0 },
-    { key: "alignmentPinInsetY", label: "Alignment pin inset Y", unit: "mm", type: "number", step: 1, min: 0 },
   ]},
-  { group: "Closure", items: [
-    { key: "magnetCount", label: "Magnet count", type: "number", step: 1, min: 0 },
-    { key: "magnetWidth", label: "Magnet width", unit: "mm", type: "number", step: 0.5, min: 1 },
-    { key: "magnetHeight", label: "Magnet height (cavity short side)", unit: "mm", type: "number", step: 0.5, min: 1 },
+  { group: "Closure", component: "magnets", items: [
+    { key: "magnetDiameter", label: "Magnet diameter", unit: "mm", type: "number", step: 0.5, min: 1 },
+    { key: "magnetCornerPadding", label: "Padding from rounded corner", unit: "mm", type: "number", step: 0.5, min: 0 },
   ]},
-  { group: "Cover / Hinge", items: [
+  { group: "Cover / Hinge", component: "hinge", items: [
     { key: "spineSpacing", label: "Spine spacing", unit: "mm", type: "number", step: 0.5, min: 0 },
     { key: "hingeLength", label: "Hinge length", unit: "mm", type: "number", step: 1, min: 1 },
     { key: "hingeStyle", label: "Hinge style", type: "select", optionsFrom: "hinge" },
@@ -99,8 +103,22 @@ export const schema = [
     { key: "hingeRowSpacing", label: "Row spacing", unit: "mm", type: "number", step: 0.1, min: 0.5 },
     { key: "hingeSlitGap", label: "Slit gap", unit: "mm", type: "number", step: 0.1, min: 0.5 },
   ]},
-  { group: "Interior", items: [
+  { group: "Interior", component: "cavity", items: [
     { key: "interiorLayerCount", label: "Interior layer count", type: "number", step: 1, min: 1 },
     { key: "interiorPocketGrowthPerLayer", label: "Pocket growth per layer", unit: "mm", type: "number", step: 0.1, min: 0 },
   ]},
+  { group: "Leather Spine", component: "leather", items: [
+    { key: "leatherWrapAllowance", label: "Wrap allowance (beyond stack thickness)", unit: "mm", type: "number", step: 0.5, min: 0 },
+  ]},
 ];
+
+// Component colors used in the on-screen preview. Exports always use params.cutColor.
+export const COMPONENT_COLORS = {
+  perimeter: "#222222",
+  cavity:    "#0066cc",
+  pens:      "#cc6600",
+  screws:    "#888888",
+  magnets:   "#00aa00",
+  hinge:     "#aa00aa",
+  leather:   "#8B4513",
+};

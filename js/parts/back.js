@@ -1,16 +1,24 @@
 // Back panel: solid rectangle with chicago screw holes down the left spine.
+// Two right-side corners (the opening, opposite the spine) are rounded.
 
-import { createBedSvg, kerfRect, kerfCircle, spineScrewPositions, addGrainOverlay } from "../svg.js";
+import {
+  createBedSvg, kerfRoundedRect, kerfCircle,
+  spineScrewPositions, addGrainOverlay, componentGroup,
+} from "../svg.js";
 import { outerFootprint, PART_ORIGIN } from "./geometry.js";
 
 export function buildBack(params, { preview = true } = {}) {
   const { outerW, outerD } = outerFootprint(params);
-  const { svg, cut, grain } = createBedSvg(params, { preview, partNaturalHeight: outerD });
+  const { svg, cut, grain } = createBedSvg(params, { preview, partNaturalWidth: outerW, partNaturalHeight: outerD });
   const { x: ox, y: oy } = PART_ORIGIN;
+  const r = params.openingCornerRadius;
+  const sr = params.spineCornerRadius;
 
-  cut.appendChild(kerfRect(ox, oy, outerW, outerD, params.kerf, "outer"));
+  componentGroup(cut, "perimeter").appendChild(
+    kerfRoundedRect(ox, oy, outerW, outerD, params.kerf, "outer", { tr: r, br: r, tl: sr, bl: sr })
+  );
 
-  // Screws arrayed vertically along the left spine edge
+  const screws = componentGroup(cut, "screws");
   for (const { cx, cy } of spineScrewPositions({
     originX: ox, originY: oy,
     outerLong: outerW, outerShort: outerD,
@@ -18,7 +26,7 @@ export function buildBack(params, { preview = true } = {}) {
     count: params.chicagoScrewCount,
     spineAxis: "left",
   })) {
-    cut.appendChild(kerfCircle(cx, cy, params.chicagoScrewDiameter / 2, params.kerf, "hole"));
+    screws.appendChild(kerfCircle(cx, cy, params.chicagoScrewDiameter / 2, params.kerf, "hole"));
   }
 
   if (preview && params.showGrain) {

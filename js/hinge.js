@@ -30,11 +30,14 @@ export function generateHinge(name, area, params) {
 //                          so material can flex.
 registerHinge("straightLattice", (area, params) => {
   const { x, y, w, h } = area;
-  const slitLen = Math.min(params.hingeSlitLength, h * 0.95);
-  const colSpacing = params.hingeRowSpacing;
-  const gap = params.hingeSlitGap;
+  // Defensive clamps: an empty number input becomes 0, which would otherwise
+  // produce an infinite or NaN column count and freeze the page on render.
+  const safe = (v, min) => (Number.isFinite(v) && v >= min ? v : min);
+  const slitLen = Math.min(safe(params.hingeSlitLength, 0.5), h * 0.95);
+  const colSpacing = safe(params.hingeRowSpacing, 0.5);
+  const gap = safe(params.hingeSlitGap, 0.1);
 
-  const colCount = Math.max(1, Math.floor(w / colSpacing));
+  const colCount = Math.min(2000, Math.max(1, Math.floor(w / colSpacing)));
   const actualSpacing = w / colCount;
   const nodes = [];
 
