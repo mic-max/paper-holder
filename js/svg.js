@@ -135,6 +135,30 @@ export function caseOuterPath(x, y, w, h, kerf, role = "outer", opts = {}) {
   return el("path", { d: seg.join(" ") });
 }
 
+// Paper cavity (rectangular hole) with an optional thumb relief bulging OUT of the right
+// edge into the surrounding frame -- the inside analogue of the outer thumb relief, so a
+// thumb can reach in and lift a sheet. Mirrors caseOuterPath's relief math (radius from the
+// chord `thumbReliefHeight` and sagitta `thumbReliefDepth`) but the arc bulges right (sweep 1,
+// growing the opening) instead of biting into the part.
+export function cavityPath(x, y, w, h, kerf, role = "hole", opts = {}) {
+  const k = role === "outer" ? kerf / 2 : role === "hole" ? -kerf / 2 : 0;
+  const X = x - k, Y = y - k, W = w + 2 * k, H = h + 2 * k;
+  const cy = Y + H / 2;
+  const reliefH = Math.max(0, Math.min(opts.thumbReliefHeight || 0, H - 2));
+  const reliefD = Math.max(0, opts.thumbReliefDepth || 0);
+  const on = reliefH > 0 && reliefD > 0;
+  const reliefR = on ? (reliefH * reliefH + 4 * reliefD * reliefD) / (8 * reliefD) : 0;
+  const largeArc = reliefD > reliefH / 2 ? 1 : 0;
+  const seg = [`M ${X} ${Y}`, `L ${X + W} ${Y}`];
+  if (on) {
+    seg.push(`L ${X + W} ${cy - reliefH / 2}`);
+    // sweep 1 = bulge right (out of the cavity, into the frame).
+    seg.push(`A ${reliefR} ${reliefR} 0 ${largeArc} 1 ${X + W} ${cy + reliefH / 2}`);
+  }
+  seg.push(`L ${X + W} ${Y + H}`, `L ${X} ${Y + H}`, "Z");
+  return el("path", { d: seg.join(" ") });
+}
+
 // Get-or-create a per-component subgroup inside the main cut group.
 // The subgroup stroke is set to the preview color for that component; export
 // strips that override so cuts come out in `params.cutColor`.

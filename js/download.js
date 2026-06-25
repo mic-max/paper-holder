@@ -9,7 +9,7 @@ export function downloadPart(name, previewSvg, params) {
   triggerDownload(`${name}.svg`, new Blob([xml], { type: "image/svg+xml" }));
 }
 
-export function downloadAllZipped(parts, params, zipName = "paper-holder.svgs.zip") {
+export function downloadAllZipped(parts, params, zipName = "paper-holder-svgs.zip") {
   const files = parts.map(({ name, svg }) => ({
     name: `${name}.svg`,
     bytes: serializeForExport(svg, params),

@@ -9,7 +9,7 @@
 // 2 * chicagoScrewCount holes mirrored about the leather's midline.
 
 import {
-  createBedSvg, kerfRect, kerfCircle, addGrainOverlay, componentGroup,
+  createBedSvg, kerfRect, kerfCircle, componentGroup,
 } from "../svg.js";
 import { outerFootprint, PART_ORIGIN } from "./geometry.js";
 
@@ -20,7 +20,7 @@ export function buildLeatherSpine(params, { preview = true } = {}) {
   const leatherWidth = 2 * params.spineSpacing + wrapZone;
   const leatherLength = outerD;
 
-  const { svg, cut, grain } = createBedSvg(params, { preview, partNaturalWidth: leatherWidth, partNaturalHeight: leatherLength });
+  const { svg, cut } = createBedSvg(params, { preview, partNaturalWidth: leatherWidth, partNaturalHeight: leatherLength });
   const { x: ox, y: oy } = PART_ORIGIN;
 
   // Outer rectangle
@@ -29,11 +29,10 @@ export function buildLeatherSpine(params, { preview = true } = {}) {
   );
 
   // Screw holes: matching the case screw y-distribution, mirrored across the wrap.
-  // On the case, screws sit at chicagoScrewSpineOffset measured from the spine edge.
-  // On flap A, the spine-edge corresponds to leather_x = spineSpacing (where wrap starts),
-  // and we move inward by chicagoScrewSpineOffset to reach the screw position.
+  // On the case, screws are centered on the spine flap (spineSpacing/2 from the spine edge),
+  // so flap A's screw sits at the center of its spineSpacing-wide band.
   // Flap B mirrors that distance from the opposite outer edge.
-  const flapAx = params.spineSpacing - params.chicagoScrewSpineOffset;
+  const flapAx = params.spineSpacing / 2;
   const flapBx = leatherWidth - flapAx;
   const holeR = params.chicagoScrewDiameter / 2;
   const screws = componentGroup(cut, "screws");
@@ -48,9 +47,7 @@ export function buildLeatherSpine(params, { preview = true } = {}) {
     screws.appendChild(kerfCircle(ox + flapBx, cy, holeR, params.kerf, "hole"));
   }
 
-  if (preview && params.showGrain) {
-    addGrainOverlay(grain, { x: ox, y: oy, w: leatherWidth, h: leatherLength, axis: "y" });
-  }
+  // No grain overlay: grain direction matters for the plywood parts, not the leather.
 
   return { name: "leather-spine", svg };
 }

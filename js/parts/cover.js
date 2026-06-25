@@ -11,6 +11,10 @@ import {
 import { outerFootprint, PART_ORIGIN } from "./geometry.js";
 import { generateHinge } from "../hinge.js";
 
+// Nominal chicago-screw head diameter (mm), drawn as a preview-only footprint so the
+// head clearance can be eyeballed while adjusting the screw layout. Not exported.
+const SCREW_HEAD_PREVIEW_DIAMETER = 12;
+
 export function buildCover(params, { preview = true } = {}) {
   const { outerW, outerD } = outerFootprint(params);
   const { svg, cut, grain } = createBedSvg(params, { preview, partNaturalWidth: outerW, partNaturalHeight: outerD });
@@ -23,16 +27,17 @@ export function buildCover(params, { preview = true } = {}) {
     kerfRoundedRect(ox, oy, outerW, outerD, params.kerf, "outer", { tr: r, br: r, tl: sr, bl: sr })
   );
 
-  // Chicago screws in the spine flap
+  // Chicago screws in the spine flap (centered on the spine flap width)
   const screws = componentGroup(cut, "screws");
-  for (const { cx, cy } of spineScrewPositions({
+  const screwPositions = spineScrewPositions({
     originX: ox, originY: oy,
     outerLong: params.spineSpacing, outerShort: outerD,
-    spineOffset: params.chicagoScrewSpineOffset,
+    spineOffset: params.spineSpacing / 2,
     count: params.chicagoScrewCount,
     endInset: params.chicagoScrewEndInset,
     spineAxis: "left",
-  })) {
+  });
+  for (const { cx, cy } of screwPositions) {
     screws.appendChild(kerfCircle(cx, cy, params.chicagoScrewDiameter / 2, params.kerf, "hole"));
   }
 
@@ -49,6 +54,17 @@ export function buildCover(params, { preview = true } = {}) {
   }
 
   if (preview) {
+    // Screw-head footprint circles (preview only; class "guide" is stripped on export).
+    // Translucent fill + bold dashed stroke so the head size reads clearly at preview zoom.
+    for (const { cx, cy } of screwPositions) {
+      screws.appendChild(el("circle", {
+        cx, cy, r: SCREW_HEAD_PREVIEW_DIAMETER / 2,
+        fill: "#888888", "fill-opacity": 0.18,
+        stroke: "#555555", "stroke-width": 0.6, "stroke-dasharray": "2 1.2",
+        class: "guide",
+      }));
+    }
+
     // Dashed guides marking the spine-flap / hinge / lid boundaries
     const guideStyle = { stroke: "#bbbbbb", "stroke-width": 0.3, "stroke-dasharray": "1 1", class: "guide" };
     cut.appendChild(el("line", { x1: ox + params.spineSpacing, y1: oy, x2: ox + params.spineSpacing, y2: oy + outerD, ...guideStyle }));

@@ -33,7 +33,6 @@ export const defaults = {
   // Fasteners
   chicagoScrewCount: 3,
   chicagoScrewDiameter: 5,
-  chicagoScrewSpineOffset: 8,
   chicagoScrewEndInset: 50,
 
   // Closure: round magnets nestle in the top-right & bottom-right rounded corners.
@@ -52,8 +51,17 @@ export const defaults = {
   interiorLayerCount: 3,
   interiorPocketGrowthPerLayer: 0,
 
+  // Interior split: build each interior layer as 4 dovetail-joined frame pieces
+  // (two full-length, two between) to reduce waste and nest on smaller stock.
+  // Seams stagger between layers (alternate full-length axis) so they don't align.
+  interiorSplit: true,
+  jointWidth: 4,    // dovetail neck width along the seam (mm)
+  jointFlare: 1,    // extra half-width at the tail tip per side (mm); tip = jointWidth + 2*jointFlare
+  jointDepth: 3,    // dovetail protrusion perpendicular to the seam (mm)
+
   // Leather spine (wraps around the case spine, sandwiched by chicago screws)
   leatherWrapAllowance: 4,
+  leatherThickness: 2,
 
   // UI-only
   showGrain: false,
@@ -76,7 +84,7 @@ export const schema = [
     { key: "paperLength", label: "Paper length", unit: "mm", type: "number", step: 1, min: 10 },
     { key: "paperWidth", label: "Paper width", unit: "mm", type: "number", step: 1, min: 10 },
     { key: "cavityClearance", label: "Cavity clearance", unit: "mm", type: "number", step: 0.5, min: 0 },
-    { key: "wallThickness", label: "Wall thickness (spine/top/bottom)", unit: "mm", type: "number", step: 0.5, min: 1 },
+    { key: "wallThickness", label: "Wall thickness (top/bottom)", unit: "mm", type: "number", step: 0.5, min: 1 },
     { key: "openingBufferWidth", label: "Opening buffer width (right wall)", unit: "mm", type: "number", step: 0.5, min: 1 },
     { key: "openingCornerRadius", label: "Opening corner radius", unit: "mm", type: "number", step: 0.5, min: 0 },
     { key: "thumbReliefHeight", label: "Thumb relief height (along edge)", unit: "mm", type: "number", step: 1, min: 0 },
@@ -92,7 +100,6 @@ export const schema = [
   { group: "Fasteners", component: "screws", items: [
     { key: "chicagoScrewCount", label: "Chicago screw count", type: "number", step: 1, min: 1 },
     { key: "chicagoScrewDiameter", label: "Screw diameter", unit: "mm", type: "number", step: 0.1, min: 0.5 },
-    { key: "chicagoScrewSpineOffset", label: "Screw spine offset", unit: "mm", type: "number", step: 0.5, min: 0 },
     { key: "chicagoScrewEndInset", label: "End screw inset from top/bottom", unit: "mm", type: "number", step: 1, min: 0 },
   ]},
   { group: "Closure", component: "magnets", items: [
@@ -110,9 +117,14 @@ export const schema = [
   { group: "Interior", component: "cavity", items: [
     { key: "interiorLayerCount", label: "Interior layer count", type: "number", step: 1, min: 1 },
     { key: "interiorPocketGrowthPerLayer", label: "Pocket growth per layer", unit: "mm", type: "number", step: 0.1, min: 0 },
+    { key: "interiorSplit", label: "Split into 4 joined pieces", type: "checkbox" },
+    { key: "jointWidth", label: "Dovetail neck width", unit: "mm", type: "number", step: 0.5, min: 1 },
+    { key: "jointFlare", label: "Dovetail flare (per side)", unit: "mm", type: "number", step: 0.1, min: 0 },
+    { key: "jointDepth", label: "Dovetail depth", unit: "mm", type: "number", step: 0.5, min: 1 },
   ]},
   { group: "Leather Spine", component: "leather", items: [
     { key: "leatherWrapAllowance", label: "Wrap allowance (beyond stack thickness)", unit: "mm", type: "number", step: 0.5, min: 0 },
+    { key: "leatherThickness", label: "Leather thickness", unit: "mm", type: "number", step: 0.1, min: 0 },
   ]},
 ];
 

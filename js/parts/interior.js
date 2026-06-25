@@ -6,7 +6,7 @@
 //   - Top interior layer also gets two magnet pockets nestled in the right rounded corners
 
 import {
-  createBedSvg, kerfRect, kerfRoundedRect, kerfCircle, caseOuterPath,
+  createBedSvg, kerfRoundedRect, kerfCircle, caseOuterPath, cavityPath,
   spineScrewPositions, addGrainOverlay, componentGroup,
 } from "../svg.js";
 import { outerFootprint, cavityRect, PART_ORIGIN } from "./geometry.js";
@@ -29,10 +29,17 @@ export function buildInteriorLayer(params, layerIndex, { preview = true } = {}) 
     })
   );
 
-  // Paper cavity
+  // Paper cavity, with an inside thumb relief on its right wall (bulging into the buffer)
+  // so a sheet can be lifted out. Clamp the inner depth so a wall always remains between it
+  // and the outer thumb relief on the part's right edge.
   const cav = cavityRect(params, grow);
+  const effBuffer = outerW - (cav.x + cav.w);
+  const innerReliefDepth = Math.min(params.thumbReliefDepth, Math.max(0, effBuffer - params.thumbReliefDepth - 2));
   componentGroup(cut, "cavity").appendChild(
-    kerfRect(ox + cav.x, oy + cav.y, cav.w, cav.h, params.kerf, "hole")
+    cavityPath(ox + cav.x, oy + cav.y, cav.w, cav.h, params.kerf, "hole", {
+      thumbReliefHeight: params.thumbReliefHeight,
+      thumbReliefDepth: innerReliefDepth,
+    })
   );
 
   // Pen pockets: two colinear rounded rectangles in the right buffer zone
@@ -59,7 +66,7 @@ export function buildInteriorLayer(params, layerIndex, { preview = true } = {}) 
   for (const { cx, cy } of spineScrewPositions({
     originX: ox, originY: oy,
     outerLong: outerW, outerShort: outerD,
-    spineOffset: params.chicagoScrewSpineOffset,
+    spineOffset: params.spineSpacing / 2,
     count: params.chicagoScrewCount,
     endInset: params.chicagoScrewEndInset,
     spineAxis: "left",

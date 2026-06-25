@@ -22,7 +22,7 @@ export function buildBack(params, { preview = true } = {}) {
   for (const { cx, cy } of spineScrewPositions({
     originX: ox, originY: oy,
     outerLong: outerW, outerShort: outerD,
-    spineOffset: params.chicagoScrewSpineOffset,
+    spineOffset: params.spineSpacing / 2,
     count: params.chicagoScrewCount,
     endInset: params.chicagoScrewEndInset,
     spineAxis: "left",
