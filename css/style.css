@@ -16,7 +16,8 @@ body {
 .topbar-group label { font-size: 12px; opacity: 0.8; }
 .topbar button { padding: 6px 12px; cursor: pointer; }
 .topbar select { padding: 4px 6px; }
-.final-dims { margin-left: auto; font-weight: bold; white-space: nowrap; }
+.topbar-right { margin-left: auto; display: flex; align-items: center; gap: 12px; }
+.final-dims { font-weight: bold; white-space: nowrap; }
 
 .units-note { margin: 0 0 10px; padding: 6px 8px; background: #fffbcc; border: 1px solid #e2d97a; font-size: 12px; }
 

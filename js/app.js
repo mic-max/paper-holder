@@ -1,4 +1,4 @@
-import { schema, COMPONENT_COLORS } from "./params.js";
+import { schema, COMPONENT_COLORS, stackThickness } from "./params.js";
 import { buildBack } from "./parts/back.js";
 import { buildCover } from "./parts/cover.js";
 import { buildInteriorLayer } from "./parts/interior.js";
@@ -15,24 +15,9 @@ let params;          // live params object (auto-saved into active profile on ch
 let activeName;      // active profile name
 let inputs = {};     // key -> input element (so we can refresh values on profile switch)
 
-// Locked dimensions (UI-only): disables the input so it can't be changed.
-// Kept separate from profiles since it's a workflow aid, not part design data.
-const LOCKED_KEY = "paperHolder:locked:v1";
-const lockedKeys = loadLockedKeys();
-
-function loadLockedKeys() {
-  try {
-    const raw = localStorage.getItem(LOCKED_KEY);
-    const arr = raw ? JSON.parse(raw) : [];
-    return new Set(Array.isArray(arr) ? arr : []);
-  } catch {
-    return new Set();
-  }
-}
-
-function saveLockedKeys() {
-  localStorage.setItem(LOCKED_KEY, JSON.stringify([...lockedKeys]));
-}
+// Locked dimensions: disables the input so it can't be changed. Stored per
+// profile (alongside params) so each profile remembers its own locks.
+let lockedKeys = new Set();
 
 function applyLockState(key) {
   const input = inputs[key];
@@ -54,6 +39,17 @@ const previewsEl = document.getElementById("previews");
 const grainToggle = document.getElementById("grainToggle");
 const downloadAllBtn = document.getElementById("downloadAll");
 const finalDimsEl = document.getElementById("finalDims");
+const unitsToggle = document.getElementById("unitsToggle");
+
+// Display units for the dimension readouts (the design itself is always mm). Persisted.
+const UNITS_KEY = "paperHolder:units:v1";
+let unitSystem = (() => {
+  try { return localStorage.getItem(UNITS_KEY) === "imperial" ? "imperial" : "metric"; }
+  catch { return "metric"; }
+})();
+const MM_PER_IN = 25.4;
+const unitLabel = () => (unitSystem === "imperial" ? "in" : "mm");
+const fmtVal = (mm) => (unitSystem === "imperial" ? (mm / MM_PER_IN).toFixed(2) : mm.toFixed(1));
 const profileSelect = document.getElementById("profileSelect");
 const saveAsBtn = document.getElementById("saveAsBtn");
 const deleteBtn = document.getElementById("deleteBtn");
@@ -94,12 +90,19 @@ function buildForm() {
     }
     lg.appendChild(document.createTextNode(group.group));
     fs.appendChild(lg);
-    for (const item of group.items) {
+    // Groups may carry a static `items` array or a function that derives items
+    // from the current params (e.g. one thickness field per layer).
+    const items = typeof group.items === "function" ? group.items(params) : group.items;
+    for (const item of items) {
       const row = document.createElement("label");
       row.className = "row";
       const span = document.createElement("span");
       span.textContent = item.label;
       row.appendChild(span);
+
+      // Array-backed fields supply get/set; plain fields read/write params[key].
+      const readParam = () => (item.get ? item.get(params) : params[item.key]);
+      const writeParam = (v) => { if (item.set) item.set(params, v); else params[item.key] = v; };
 
       let input;
       if (item.type === "select") {
@@ -110,29 +113,47 @@ function buildForm() {
           opt.value = o; opt.textContent = o;
           input.appendChild(opt);
         }
-        input.value = params[item.key];
+        input.value = readParam();
       } else if (item.type === "color") {
         input = document.createElement("input");
         input.type = "color";
-        input.value = params[item.key];
+        input.value = readParam();
+      } else if (item.type === "text") {
+        input = document.createElement("input");
+        input.type = "text";
+        input.value = readParam();
       } else if (item.type === "checkbox") {
         input = document.createElement("input");
         input.type = "checkbox";
-        input.checked = !!params[item.key];
+        input.checked = !!readParam();
       } else {
         input = document.createElement("input");
         input.type = "number";
         if (item.step != null) input.step = item.step;
         if (item.min != null) input.min = item.min;
-        input.value = params[item.key];
+        input.value = readParam();
       }
+      const readInput = () =>
+        input.type === "checkbox" ? input.checked
+        : input.type === "number" ? Number(input.value)
+        : input.value;
+      // Live update on every keystroke (no structural change).
       input.addEventListener("input", () => {
-        if (input.type === "checkbox") params[item.key] = input.checked;
-        else if (input.type === "number") params[item.key] = Number(input.value);
-        else params[item.key] = input.value;
-        saveActive(params);
+        writeParam(readInput());
+        saveActive(params, lockedKeys);
         render();
       });
+      // Fields that change the field list (e.g. layer count) resize/rebuild on commit
+      // only, so typing a multi-digit value doesn't tear down the form mid-edit.
+      if (item.rebuildsForm) {
+        input.addEventListener("change", () => {
+          writeParam(readInput());
+          if (item.afterChange) item.afterChange(params);
+          saveActive(params, lockedKeys);
+          buildForm();
+          render();
+        });
+      }
       inputs[item.key] = input;
       row.appendChild(input);
 
@@ -143,7 +164,7 @@ function buildForm() {
         e.preventDefault();
         if (lockedKeys.has(item.key)) lockedKeys.delete(item.key);
         else lockedKeys.add(item.key);
-        saveLockedKeys();
+        saveActive(params, lockedKeys);
         applyLockState(item.key);
       });
       lockBtns[item.key] = lockBtn;
@@ -156,51 +177,34 @@ function buildForm() {
   }
 }
 
-function refreshFormValues() {
-  for (const [key, input] of Object.entries(inputs)) {
-    if (input.type === "checkbox") input.checked = !!params[key];
-    else input.value = params[key];
-  }
-}
-
-// Solid (non-split) interior layers, deduped: when there's no per-layer pocket growth, every
-// non-top layer is identical, so collapse them into one card ×(N-1) plus the magnet-bearing
-// top. With growth, layers differ, so show them individually.
-function buildSolidInteriorLayers() {
-  const N = params.interiorLayerCount;
-  if (params.interiorPocketGrowthPerLayer !== 0) {
-    const out = [];
-    for (let i = N - 1; i >= 0; i--) out.push(buildInteriorLayer(params, i));
-    return out;
-  }
-  const out = [];
-  const nonTopCount = N - 1;
-  if (nonTopCount > 0) {
-    const layer = buildInteriorLayer(params, 0); // index 0 is non-top when N > 1
-    layer.name = "layer";
-    layer.count = nonTopCount;
-    layer.exports = [{ name: nonTopCount > 1 ? `layer-x${nonTopCount}` : "layer", svg: layer.svg }];
-    out.push(layer);
-  }
-  const top = buildInteriorLayer(params, N - 1);
-  top.name = "layer-top";
-  top.count = 1;
-  top.exports = [{ name: "layer-top", svg: top.svg }];
-  out.push(top);
-  return out;
-}
-
 function collectParts() {
+  const T = params.layerThicknesses; // [cover, interior 1..N, back]
   const parts = [];
-  parts.push(buildLeatherSpine(params));
-  parts.push(buildCover(params));
-  if (params.interiorSplit) {
-    // Unique layer types (odd/even) preview assembled; exports are deduped pieces.
-    parts.push(...buildInteriorLayers(params));
-  } else {
-    parts.push(...buildSolidInteriorLayers());
-  }
-  parts.push(buildBack(params));
+
+  const leather = buildLeatherSpine(params);
+  leather.thickness = params.leatherThickness;
+  parts.push(leather);
+
+  const cover = buildCover(params);
+  cover.thickness = T[0];
+  parts.push(cover);
+
+  // Each interior layer is unique (per-layer cavity growth), so render one card per layer.
+  // Cards are emitted top-first (layer index N-1 .. 0); layer index i uses thickness slot i+1.
+  const interior = params.interiorSplit
+    ? buildInteriorLayers(params)
+    : Array.from({ length: params.interiorLayerCount },
+        (_, k) => buildInteriorLayer(params, params.interiorLayerCount - 1 - k));
+  interior.forEach((part, k) => {
+    const layerIndex = params.interiorLayerCount - 1 - k;
+    part.thickness = T[layerIndex + 1];
+    parts.push(part);
+  });
+
+  const back = buildBack(params);
+  back.thickness = T[T.length - 1];
+  parts.push(back);
+
   return parts;
 }
 
@@ -211,11 +215,9 @@ let currentParts = [];
 // (each one material sheet) plus the leather spine wrapping both faces (×2).
 function updateFinalDims() {
   const { outerW, outerD } = outerFootprint(params);
-  const thickness =
-    (params.interiorLayerCount + 2) * params.materialThickness +
-    2 * params.leatherThickness;
+  const thickness = stackThickness(params) + 2 * params.leatherThickness;
   finalDimsEl.textContent =
-    `Final: ${outerW.toFixed(1)} × ${outerD.toFixed(1)} × ${thickness.toFixed(1)} mm`;
+    `Final: ${fmtVal(outerW)} × ${fmtVal(outerD)} × ${fmtVal(thickness)} ${unitLabel()}`;
 }
 
 function render() {
@@ -231,7 +233,9 @@ function render() {
     const h = Number(part.svg.getAttribute("data-natural-height")) || 0;
     const dims = document.createElement("span");
     dims.className = "card-dims";
-    dims.textContent = ` — ${w.toFixed(1)} × ${h.toFixed(1)} mm`;
+    const t = part.thickness;
+    const thk = t != null ? ` × ${fmtVal(t)}` : "";
+    dims.textContent = ` — ${fmtVal(w)} × ${fmtVal(h)}${thk} ${unitLabel()}`;
     title.textContent = part.count ? `${part.name} ×${part.count}` : part.name;
     title.appendChild(dims);
     const exports = part.exports || [{ name: part.name, svg: part.svg }];
@@ -259,8 +263,10 @@ function render() {
   const state = loadState();
   params = state.params;
   activeName = state.activeName;
+  lockedKeys = new Set(state.locked);
   repopulateProfileSelect(state.names, activeName);
   grainToggle.checked = !!params.showGrain;
+  unitsToggle.textContent = `Units: ${unitLabel()}`;
   buildForm();
   render();
 }
@@ -270,6 +276,13 @@ function render() {
 grainToggle.addEventListener("change", () => {
   params.showGrain = grainToggle.checked;
   saveActive(params);
+  render();
+});
+
+unitsToggle.addEventListener("click", () => {
+  unitSystem = unitSystem === "imperial" ? "metric" : "imperial";
+  try { localStorage.setItem(UNITS_KEY, unitSystem); } catch {}
+  unitsToggle.textContent = `Units: ${unitLabel()}`;
   render();
 });
 
@@ -287,15 +300,16 @@ profileSelect.addEventListener("change", () => {
   const state = selectProfile(profileSelect.value);
   params = state.params;
   activeName = state.activeName;
+  lockedKeys = new Set(state.locked);
   grainToggle.checked = !!params.showGrain;
-  refreshFormValues();
+  buildForm();
   render();
 });
 
 saveAsBtn.addEventListener("click", () => {
   const name = window.prompt("New profile name:", "");
   if (!name) return;
-  const state = saveAs(name, params);
+  const state = saveAs(name, params, lockedKeys);
   activeName = state.activeName;
   repopulateProfileSelect(state.names, activeName);
 });
@@ -306,16 +320,19 @@ deleteBtn.addEventListener("click", () => {
   if (!state) return;
   params = state.params;
   activeName = state.activeName;
+  lockedKeys = new Set(state.locked);
   repopulateProfileSelect(state.names, activeName);
   grainToggle.checked = !!params.showGrain;
-  refreshFormValues();
+  buildForm();
   render();
 });
 
 resetBtn.addEventListener("click", () => {
   if (!window.confirm(`Reset profile "${activeName}" to built-in defaults?`)) return;
-  params = resetActiveToDefaults();
+  const state = resetActiveToDefaults();
+  params = state.params;
+  lockedKeys = new Set(state.locked);
   grainToggle.checked = !!params.showGrain;
-  refreshFormValues();
+  buildForm();
   render();
 });

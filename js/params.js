@@ -1,9 +1,13 @@
 // Central source of truth for generator parameters.
 // `defaults` is the runtime params object. `schema` drives form generation in app.js.
 
+export const DEFAULT_LAYER_THICKNESS = 3;
+
 export const defaults = {
   // Material & machine
-  materialThickness: 3,
+  // Per-sheet thickness for the stack, ordered: [cover, interior 1..N, back].
+  // Length is always interiorLayerCount + 2 (kept in sync by resizeLayerThicknesses).
+  layerThicknesses: [3, 3, 3, 3, 3],
   kerf: 0.1,
   bedWidth: 609.6,
   bedDepth: 304.8,
@@ -29,6 +33,8 @@ export const defaults = {
   penPocketWidth: 10,
   penPocketCornerRadius: 3,
   penPocketGap: 30,
+  penReliefHeight: 24,
+  penReliefDepth: 3,
 
   // Fasteners
   chicagoScrewCount: 3,
@@ -47,6 +53,13 @@ export const defaults = {
   hingeRowSpacing: 4,
   hingeSlitGap: 3,
 
+  // Cover etch: crane artwork engraved on the lid, centered between the living-hinge
+  // kerfs and the opening edge. Height in mm (auto-clamped to fit the available zone).
+  coverEtch: true,
+  coverEtchFilled: true,     // true = solid silhouette; false = outline only
+  coverEtchHeight: 120,
+  coverEtchStrokeWidth: 0.4, // outline line weight (mm, on the cover) when not filled
+
   // Interior
   interiorLayerCount: 3,
   interiorPocketGrowthPerLayer: 0,
@@ -62,15 +75,75 @@ export const defaults = {
   // Leather spine (wraps around the case spine, sandwiched by chicago screws)
   leatherWrapAllowance: 4,
   leatherThickness: 2,
+  // Etched spine name: runs along the spine, centered between the screw columns.
+  leatherEtch: true,
+  leatherEtchText: "Joyce Carroll",
 
   // UI-only
   showGrain: false,
 };
 
+const num = (v, fallback) => (Number.isFinite(+v) ? +v : fallback);
+
+// Total assembled thickness of the rigid stack (cover + interior layers + back).
+export function stackThickness(p) {
+  return (p.layerThicknesses || []).reduce((sum, t) => sum + num(t, 0), 0);
+}
+
+// Force `layerThicknesses` to have exactly interiorLayerCount + 2 entries, preserving
+// the cover (first) and back (last) and growing/shrinking the interior region between
+// them. New interior entries copy the nearest existing interior thickness.
+export function resizeLayerThicknesses(p) {
+  const need = num(p.interiorLayerCount, 1) + 2;
+  let arr = (Array.isArray(p.layerThicknesses) ? p.layerThicknesses : [])
+    .map((t) => num(t, DEFAULT_LAYER_THICKNESS));
+  if (arr.length < 2) {
+    // Nothing usable to preserve — fill uniformly.
+    p.layerThicknesses = Array(need).fill(arr[0] ?? DEFAULT_LAYER_THICKNESS);
+    return p;
+  }
+  const cover = arr[0];
+  const back = arr[arr.length - 1];
+  let interiors = arr.slice(1, -1);
+  const needInteriors = need - 2;
+  const fill = interiors.length ? interiors[interiors.length - 1] : cover;
+  while (interiors.length < needInteriors) interiors.push(fill);
+  if (interiors.length > needInteriors) interiors = interiors.slice(0, needInteriors);
+  p.layerThicknesses = [cover, ...interiors, back];
+  return p;
+}
+
+// Merge a stored profile over defaults, cloning the thickness array and migrating
+// legacy single-value `materialThickness` into a per-layer array when present.
+export function mergeParams(stored) {
+  stored = stored || {};
+  const p = { ...defaults, ...stored };
+  if (Array.isArray(stored.layerThicknesses)) {
+    p.layerThicknesses = [...stored.layerThicknesses];
+  } else {
+    const t = num(stored.materialThickness, DEFAULT_LAYER_THICKNESS);
+    p.layerThicknesses = Array(num(p.interiorLayerCount, 1) + 2).fill(t);
+  }
+  delete p.materialThickness;
+  return resizeLayerThicknesses(p);
+}
+
+// Dynamic per-layer thickness fields, regenerated whenever interiorLayerCount changes.
+export function layerThicknessItems(p) {
+  const n = num(p.interiorLayerCount, 1);
+  const labels = ["Cover", ...Array.from({ length: n }, (_, i) => `Interior ${i + 1}`), "Back"];
+  return labels.map((label, i) => ({
+    key: `layerThickness:${i}`,
+    label: `${label} thickness`,
+    unit: "mm", type: "number", step: 0.1, min: 0.1,
+    get: (pp) => pp.layerThicknesses[i],
+    set: (pp, v) => { pp.layerThicknesses[i] = v; },
+  }));
+}
+
 // type: "number" | "select" | "checkbox" | "color"
 export const schema = [
   { group: "Material & Machine", component: null, items: [
-    { key: "materialThickness", label: "Material thickness", unit: "mm", type: "number", step: 0.1, min: 0.1 },
     { key: "kerf", label: "Kerf", unit: "mm", type: "number", step: 0.01, min: 0 },
     { key: "bedWidth", label: "Bed width", unit: "mm", type: "number", step: 0.1, min: 10 },
     { key: "bedDepth", label: "Bed depth", unit: "mm", type: "number", step: 0.1, min: 10 },
@@ -80,6 +153,9 @@ export const schema = [
     { key: "cutColor", label: "Cut color", type: "color" },
     { key: "etchColor", label: "Etch color", type: "color" },
   ]},
+  // Per-sheet thickness, one field per physical layer (cover + interiors + back).
+  // `items` is a function so the field list tracks interiorLayerCount.
+  { group: "Layer Thicknesses", component: null, items: layerThicknessItems },
   { group: "Paper / Cavity", component: "cavity", items: [
     { key: "paperLength", label: "Paper length", unit: "mm", type: "number", step: 1, min: 10 },
     { key: "paperWidth", label: "Paper width", unit: "mm", type: "number", step: 1, min: 10 },
@@ -96,6 +172,8 @@ export const schema = [
     { key: "penPocketWidth", label: "Pen pocket width", unit: "mm", type: "number", step: 0.5, min: 1 },
     { key: "penPocketCornerRadius", label: "Pen pocket corner radius", unit: "mm", type: "number", step: 0.1, min: 0 },
     { key: "penPocketGap", label: "Gap between pen pockets", unit: "mm", type: "number", step: 1, min: 0 },
+    { key: "penReliefHeight", label: "Pen relief height (along slot)", unit: "mm", type: "number", step: 1, min: 0 },
+    { key: "penReliefDepth", label: "Pen relief depth (each side)", unit: "mm", type: "number", step: 0.5, min: 0 },
   ]},
   { group: "Fasteners", component: "screws", items: [
     { key: "chicagoScrewCount", label: "Chicago screw count", type: "number", step: 1, min: 1 },
@@ -113,9 +191,14 @@ export const schema = [
     { key: "hingeSlitLength", label: "Slit length", unit: "mm", type: "number", step: 0.5, min: 1 },
     { key: "hingeRowSpacing", label: "Row spacing", unit: "mm", type: "number", step: 0.1, min: 0.5 },
     { key: "hingeSlitGap", label: "Slit gap", unit: "mm", type: "number", step: 0.1, min: 0.5 },
+    { key: "coverEtch", label: "Etch crane on cover", type: "checkbox" },
+    { key: "coverEtchFilled", label: "Crane etch filled (vs outline)", type: "checkbox" },
+    { key: "coverEtchHeight", label: "Crane etch height", unit: "mm", type: "number", step: 1, min: 0 },
+    { key: "coverEtchStrokeWidth", label: "Crane etch stroke (outline)", unit: "mm", type: "number", step: 0.05, min: 0.05 },
   ]},
   { group: "Interior", component: "cavity", items: [
-    { key: "interiorLayerCount", label: "Interior layer count", type: "number", step: 1, min: 1 },
+    { key: "interiorLayerCount", label: "Interior layer count", type: "number", step: 1, min: 1,
+      afterChange: resizeLayerThicknesses, rebuildsForm: true },
     { key: "interiorPocketGrowthPerLayer", label: "Pocket growth per layer", unit: "mm", type: "number", step: 0.1, min: 0 },
     { key: "interiorSplit", label: "Split into 4 joined pieces", type: "checkbox" },
     { key: "jointWidth", label: "Dovetail neck width", unit: "mm", type: "number", step: 0.5, min: 1 },
@@ -125,6 +208,8 @@ export const schema = [
   { group: "Leather Spine", component: "leather", items: [
     { key: "leatherWrapAllowance", label: "Wrap allowance (beyond stack thickness)", unit: "mm", type: "number", step: 0.5, min: 0 },
     { key: "leatherThickness", label: "Leather thickness", unit: "mm", type: "number", step: 0.1, min: 0 },
+    { key: "leatherEtch", label: "Etch name on spine", type: "checkbox" },
+    { key: "leatherEtchText", label: "Spine text", type: "text" },
   ]},
 ];
 

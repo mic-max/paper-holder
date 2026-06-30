@@ -159,6 +159,56 @@ export function cavityPath(x, y, w, h, kerf, role = "hole", opts = {}) {
   return el("path", { d: seg.join(" ") });
 }
 
+// Pen-pocket slot: a rounded rectangle (hole) with a thumb relief bulging OUT of BOTH long
+// sides at the slot's mid-length, so a pen can be lifted from its center of gravity and rise
+// vertically. reliefH = chord along the slot, reliefD = depth out each side; either 0 skips
+// the reliefs. Both arcs use sweep 1 (verified) so they bulge outward (widening the slot).
+export function penPocketPath(x, y, w, h, kerf, role = "hole", opts = {}) {
+  const k = role === "outer" ? kerf / 2 : role === "hole" ? -kerf / 2 : 0;
+  const X = x - k, Y = y - k, W = w + 2 * k, H = h + 2 * k;
+  const cr = Math.max(0, Math.min(opts.cornerRadius || 0, Math.min(W, H) / 2));
+  const cy = Y + H / 2;
+  const reliefH = Math.max(0, Math.min(opts.reliefH || 0, H - 2 * cr - 1));
+  const reliefD = Math.max(0, opts.reliefD || 0);
+  const on = reliefH > 0 && reliefD > 0;
+  const rr = on ? (reliefH * reliefH + 4 * reliefD * reliefD) / (8 * reliefD) : 0;
+  const la = reliefD > reliefH / 2 ? 1 : 0;
+  const seg = [`M ${X + cr} ${Y}`, `L ${X + W - cr} ${Y}`];
+  if (cr > 0) seg.push(`A ${cr} ${cr} 0 0 1 ${X + W} ${Y + cr}`);
+  if (on) {
+    seg.push(`L ${X + W} ${cy - reliefH / 2}`);
+    seg.push(`A ${rr} ${rr} 0 ${la} 1 ${X + W} ${cy + reliefH / 2}`); // bulge +x
+  }
+  seg.push(`L ${X + W} ${Y + H - cr}`);
+  if (cr > 0) seg.push(`A ${cr} ${cr} 0 0 1 ${X + W - cr} ${Y + H}`);
+  seg.push(`L ${X + cr} ${Y + H}`);
+  if (cr > 0) seg.push(`A ${cr} ${cr} 0 0 1 ${X} ${Y + H - cr}`);
+  if (on) {
+    seg.push(`L ${X} ${cy + reliefH / 2}`);
+    seg.push(`A ${rr} ${rr} 0 ${la} 1 ${X} ${cy - reliefH / 2}`); // bulge -x
+  }
+  seg.push(`L ${X} ${Y + cr}`);
+  if (cr > 0) seg.push(`A ${cr} ${cr} 0 0 1 ${X + cr} ${Y}`);
+  seg.push("Z");
+  return el("path", { d: seg.join(" ") });
+}
+
+// Nominal chicago-screw head diameter (mm).
+export const SCREW_HEAD_PREVIEW_DIAMETER = 12;
+
+// Preview-only screw-head footprint rings (class "guide" => stripped on export by download.js).
+// Lets head clearance / spacing be eyeballed. `positions` = array of { cx, cy } in draw coords.
+export function addScrewHeadGuides(group, positions, diameter = SCREW_HEAD_PREVIEW_DIAMETER) {
+  for (const { cx, cy } of positions) {
+    group.appendChild(el("circle", {
+      cx, cy, r: diameter / 2,
+      fill: "#888888", "fill-opacity": 0.18,
+      stroke: "#555555", "stroke-width": 0.6, "stroke-dasharray": "2 1.2",
+      class: "guide",
+    }));
+  }
+}
+
 // Get-or-create a per-component subgroup inside the main cut group.
 // The subgroup stroke is set to the preview color for that component; export
 // strips that override so cuts come out in `params.cutColor`.

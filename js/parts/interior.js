@@ -6,17 +6,17 @@
 //   - Top interior layer also gets two magnet pockets nestled in the right rounded corners
 
 import {
-  createBedSvg, kerfRoundedRect, kerfCircle, caseOuterPath, cavityPath,
+  createBedSvg, penPocketPath, kerfCircle, caseOuterPath, cavityPath,
   spineScrewPositions, addGrainOverlay, componentGroup,
 } from "../svg.js";
-import { outerFootprint, cavityRect, PART_ORIGIN } from "./geometry.js";
+import { outerFootprint, cavityRect, PART_ORIGIN, layerGrowth } from "./geometry.js";
 
 export function buildInteriorLayer(params, layerIndex, { preview = true } = {}) {
   const { outerW, outerD } = outerFootprint(params);
   const { svg, cut, grain } = createBedSvg(params, { preview, partNaturalWidth: outerW, partNaturalHeight: outerD });
   const { x: ox, y: oy } = PART_ORIGIN;
   const isTop = layerIndex === params.interiorLayerCount - 1;
-  const grow = layerIndex * params.interiorPocketGrowthPerLayer;
+  const grow = layerGrowth(params, layerIndex);
   const r = params.openingCornerRadius;
   const sr = params.spineCornerRadius;
 
@@ -49,14 +49,16 @@ export function buildInteriorLayer(params, layerIndex, { preview = true } = {}) 
     const pocketX = cxBuffer - params.penPocketWidth / 2;
     const totalH = 2 * params.penPocketLength + params.penPocketGap;
     const startY = (outerD - totalH) / 2;
+    const penMargin = (params.openingBufferWidth - params.penPocketWidth) / 2;
+    const penReliefD = Math.min(params.penReliefDepth, Math.max(0, penMargin - 1));
     for (let i = 0; i < 2; i++) {
       const py = startY + i * (params.penPocketLength + params.penPocketGap);
-      pens.appendChild(kerfRoundedRect(
+      pens.appendChild(penPocketPath(
         ox + pocketX, oy + py,
         params.penPocketWidth, params.penPocketLength,
         params.kerf, "hole",
-        { tl: params.penPocketCornerRadius, tr: params.penPocketCornerRadius,
-          bl: params.penPocketCornerRadius, br: params.penPocketCornerRadius },
+        { cornerRadius: params.penPocketCornerRadius,
+          reliefH: params.penReliefHeight, reliefD: penReliefD },
       ));
     }
   }
@@ -99,5 +101,5 @@ export function buildInteriorLayer(params, layerIndex, { preview = true } = {}) 
     addGrainOverlay(grain, { x: ox, y: oy, w: outerW, h: outerD, axis: "y" });
   }
 
-  return { name: `interior-layer-${layerIndex + 1}${isTop ? "-top" : ""}`, svg };
+  return { name: `layer-${layerIndex + 1}${isTop ? "-top" : ""}`, svg };
 }

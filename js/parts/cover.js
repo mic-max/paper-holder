@@ -6,18 +6,15 @@
 
 import {
   createBedSvg, kerfRoundedRect, kerfCircle,
-  spineScrewPositions, addGrainOverlay, componentGroup, el,
+  spineScrewPositions, addGrainOverlay, addScrewHeadGuides, componentGroup, el,
 } from "../svg.js";
 import { outerFootprint, PART_ORIGIN } from "./geometry.js";
 import { generateHinge } from "../hinge.js";
-
-// Nominal chicago-screw head diameter (mm), drawn as a preview-only footprint so the
-// head clearance can be eyeballed while adjusting the screw layout. Not exported.
-const SCREW_HEAD_PREVIEW_DIAMETER = 12;
+import { CRANE } from "../assets/crane.js";
 
 export function buildCover(params, { preview = true } = {}) {
   const { outerW, outerD } = outerFootprint(params);
-  const { svg, cut, grain } = createBedSvg(params, { preview, partNaturalWidth: outerW, partNaturalHeight: outerD });
+  const { svg, cut, etch, grain } = createBedSvg(params, { preview, partNaturalWidth: outerW, partNaturalHeight: outerD });
   const { x: ox, y: oy } = PART_ORIGIN;
   const r = params.openingCornerRadius;
   const sr = params.spineCornerRadius;
@@ -49,21 +46,49 @@ export function buildCover(params, { preview = true } = {}) {
     w: params.hingeLength,
     h: outerD,
   };
-  for (const node of generateHinge(params.hingeStyle, hingeArea, params)) {
+  // Track the rightmost x of any hinge kerf as we add the slits (robust to hinge style).
+  const hingeNodes = generateHinge(params.hingeStyle, hingeArea, params);
+  let hingeMaxX = hingeArea.x;
+  for (const node of hingeNodes) {
+    for (const attr of ["x1", "x2", "x"]) {
+      const v = Number(node.getAttribute(attr));
+      if (Number.isFinite(v)) hingeMaxX = Math.max(hingeMaxX, v);
+    }
     hingeG.appendChild(node);
+  }
+
+  // Crane etch on the lid: centered vertically, and horizontally between the rightmost
+  // hinge kerf and the opening (right) edge. Scaled to coverEtchHeight, clamped to fit.
+  if (params.coverEtch && params.coverEtchHeight > 0) {
+    const openingEdgeX = ox + outerW;
+    const centerX = (hingeMaxX + openingEdgeX) / 2;
+    const centerY = oy + outerD / 2;
+    const fitS = Math.min((openingEdgeX - hingeMaxX) / CRANE.width, outerD / CRANE.height);
+    const s = Math.min(params.coverEtchHeight / CRANE.height, fitS);
+    if (s > 0) {
+      const tx = centerX - s * (CRANE.width / 2);
+      const ty = centerY - s * (CRANE.height / 2);
+      const transform = `translate(${tx} ${ty}) scale(${s})`;
+      // Filled silhouette, or outline only. For the outline, divide the width by s so
+      // the on-cover stroke matches the param in mm despite the group's scale transform.
+      const craneG = el("g", params.coverEtchFilled
+        ? { fill: params.etchColor, stroke: "none", transform }
+        : {
+            fill: "none",
+            stroke: params.etchColor,
+            "stroke-width": params.coverEtchStrokeWidth / s,
+            "stroke-linejoin": "round",
+            "stroke-linecap": "round",
+            transform,
+          });
+      for (const d of CRANE.paths) craneG.appendChild(el("path", { d }));
+      etch.appendChild(craneG);
+    }
   }
 
   if (preview) {
     // Screw-head footprint circles (preview only; class "guide" is stripped on export).
-    // Translucent fill + bold dashed stroke so the head size reads clearly at preview zoom.
-    for (const { cx, cy } of screwPositions) {
-      screws.appendChild(el("circle", {
-        cx, cy, r: SCREW_HEAD_PREVIEW_DIAMETER / 2,
-        fill: "#888888", "fill-opacity": 0.18,
-        stroke: "#555555", "stroke-width": 0.6, "stroke-dasharray": "2 1.2",
-        class: "guide",
-      }));
-    }
+    addScrewHeadGuides(screws, screwPositions);
 
     // Dashed guides marking the spine-flap / hinge / lid boundaries
     const guideStyle = { stroke: "#bbbbbb", "stroke-width": 0.3, "stroke-dasharray": "1 1", class: "guide" };

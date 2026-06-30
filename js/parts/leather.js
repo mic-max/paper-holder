@@ -9,18 +9,18 @@
 // 2 * chicagoScrewCount holes mirrored about the leather's midline.
 
 import {
-  createBedSvg, kerfRect, kerfCircle, componentGroup,
+  createBedSvg, kerfRect, kerfCircle, addScrewHeadGuides, componentGroup, el,
 } from "../svg.js";
 import { outerFootprint, PART_ORIGIN } from "./geometry.js";
+import { stackThickness } from "../params.js";
 
 export function buildLeatherSpine(params, { preview = true } = {}) {
   const { outerD } = outerFootprint(params);
-  const stackThickness = (params.interiorLayerCount + 2) * params.materialThickness;
-  const wrapZone = stackThickness + params.leatherWrapAllowance;
+  const wrapZone = stackThickness(params) + params.leatherWrapAllowance;
   const leatherWidth = 2 * params.spineSpacing + wrapZone;
   const leatherLength = outerD;
 
-  const { svg, cut } = createBedSvg(params, { preview, partNaturalWidth: leatherWidth, partNaturalHeight: leatherLength });
+  const { svg, cut, etch } = createBedSvg(params, { preview, partNaturalWidth: leatherWidth, partNaturalHeight: leatherLength });
   const { x: ox, y: oy } = PART_ORIGIN;
 
   // Outer rectangle
@@ -40,14 +40,37 @@ export function buildLeatherSpine(params, { preview = true } = {}) {
   const count = Math.max(1, params.chicagoScrewCount);
   const endInset = params.chicagoScrewEndInset;
   const span = Math.max(0, leatherLength - 2 * endInset);
+  const headPositions = [];
   for (let i = 0; i < count; i++) {
     const t = count === 1 ? 0.5 : i / (count - 1);
     const cy = oy + endInset + span * t;
     screws.appendChild(kerfCircle(ox + flapAx, cy, holeR, params.kerf, "hole"));
     screws.appendChild(kerfCircle(ox + flapBx, cy, holeR, params.kerf, "hole"));
+    headPositions.push({ cx: ox + flapAx, cy }, { cx: ox + flapBx, cy });
   }
 
-  // No grain overlay: grain direction matters for the plywood parts, not the leather.
+  // Bolt-head footprint rings (preview only; class "guide" is stripped on export) so the
+  // spacing/clearance is visible. Grain overlay is intentionally omitted for leather.
+  if (preview) addScrewHeadGuides(screws, headPositions);
+
+  // Etched name: runs along the long axis (rotated 90°), centered along the length and
+  // horizontally between the two screw columns (i.e. centered in the wrap zone). Height
+  // tracks the plywood stack thickness (the spine depth), clamped to the wrap zone.
+  const text = String(params.leatherEtchText || "").trim();
+  if (params.leatherEtch && text) {
+    const cx = ox + leatherWidth / 2;
+    const cy = oy + leatherLength / 2;
+    const fontSize = Math.min(stackThickness(params), wrapZone);
+    const label = el("text", {
+      x: cx, y: cy,
+      "text-anchor": "middle", "dominant-baseline": "central",
+      "font-size": fontSize, "font-family": "serif",
+      fill: params.etchColor, stroke: "none",
+      transform: `rotate(90 ${cx} ${cy})`,
+    });
+    label.textContent = text.toUpperCase();
+    etch.appendChild(label);
+  }
 
   return { name: "leather-spine", svg };
 }

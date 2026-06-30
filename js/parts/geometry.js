@@ -20,6 +20,17 @@ export function cavityRect(params, layerGrowth = 0) {
   };
 }
 
+// Per-layer paper-cavity growth (mm), increasing toward the top layer (highest index).
+// Only the large cavity grows -- pens, reliefs, screws and the outer footprint stay fixed.
+// Clamped so the frame bands never collapse and the cavity stays clear of the pen pockets.
+export function layerGrowth(params, layerIndex) {
+  const raw = layerIndex * params.interiorPocketGrowthPerLayer;
+  const bandLimit = Math.min(params.spineSpacing, params.openingBufferWidth, params.wallThickness) - 2;
+  const penLimit = (params.openingBufferWidth - params.penPocketWidth) / 2 - 1;
+  const maxGrow = Math.max(0, Math.min(bandLimit, penLimit));
+  return Math.max(0, Math.min(raw, maxGrow));
+}
+
 // Right-side buffer zone (where pen pockets and corner magnets live).
 export function bufferRect(params) {
   const { outerW, outerD } = outerFootprint(params);

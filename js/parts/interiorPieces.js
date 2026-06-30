@@ -20,13 +20,15 @@
 // magnets) keep using the existing kerf "hole" primitives.
 
 import {
-  createBedSvg, kerfRoundedRect, kerfCircle, el,
+  createBedSvg, penPocketPath, kerfCircle, el,
   spineScrewPositions, addGrainOverlay, componentGroup,
 } from "../svg.js";
-import { outerFootprint, PART_ORIGIN } from "./geometry.js";
+import { outerFootprint, PART_ORIGIN, layerGrowth } from "./geometry.js";
 
 // Human-friendly piece names by edge role.
 const PIECE_LABEL = { left: "spine", right: "opening", top: "head", bottom: "foot" };
+// Short codes for the laser-etched assembly mark (e.g. "s3" = spine, layer 3).
+const PIECE_ETCH = { left: "L", right: "R", top: "U", bottom: "D" };
 
 // Effective dovetail dimensions for one seam, clamped to fit the band and kerf-aware.
 //   seamLen   = available length along the seam (limits neck/tip width)
@@ -42,9 +44,10 @@ export function effJoint(seamLen, perpWidth, params) {
 
 // Inside thumb-relief chord/depth, reusing the outer relief's shape params. Depth is clamped
 // so a wall always remains between it and the outer relief on the opening piece's far edge.
-export function innerReliefDims(params) {
+export function innerReliefDims(params, grow = 0) {
   const h = params.thumbReliefHeight;
-  const d = Math.min(params.thumbReliefDepth, Math.max(0, params.openingBufferWidth - params.thumbReliefDepth - 2));
+  const avail = params.openingBufferWidth - grow; // opening band width at this layer
+  const d = Math.min(params.thumbReliefDepth, Math.max(0, avail - params.thumbReliefDepth - 2));
   return { reliefH: h, reliefD: d };
 }
 
@@ -152,109 +155,120 @@ export function piecePathD(spec, params, off) {
 // Describe the 4 pieces for a layer in footprint coordinates (pure; no DOM).
 export function computePieceSpecs(params, layerIndex) {
   const { outerW, outerD } = outerFootprint(params);
-  const SS = params.spineSpacing;          // left band width
-  const BUF = params.openingBufferWidth;   // right band width
-  const WT = params.wallThickness;          // top/bottom band height
-  const RX0 = outerW - BUF;                 // cavity right / right band left
-  const BY0 = outerD - WT;                  // cavity bottom / bottom band top
+  const SS = params.spineSpacing;          // left band width (no growth)
+  const BUF = params.openingBufferWidth;   // right band width (no growth)
+  const WT = params.wallThickness;          // top/bottom band height (no growth)
+  const RX0 = outerW - BUF;
+  const BY0 = outerD - WT;
   const r = params.openingCornerRadius;     // opening (right) corner radius
   const sr = params.spineCornerRadius;      // spine (left) corner roundover
   const isTop = layerIndex === params.interiorLayerCount - 1;
   const mode = layerIndex % 2 === 0 ? "V" : "H"; // V = vertical-full, H = horizontal-full
 
-  // Dovetail centers (footprint coords).
-  const yTopBand = WT / 2;
-  const yBotBand = (BY0 + outerD) / 2;
-  const xLeftBand = SS / 2;
-  const xRightBand = (RX0 + outerW) / 2;
+  // Per-layer cavity growth: the paper cavity expands outward by `grow` on every side, so the
+  // frame bands and their dovetail seams shrink toward the cavity. Outer edges, screws,
+  // magnets, pens and reliefs stay put. `grow` increases toward the top layer.
+  const grow = layerGrowth(params, layerIndex);
+  const cavL = SS - grow;            // cavity left edge  (spine band inner edge)
+  const cavR = RX0 + grow;           // cavity right edge (opening band inner edge)
+  const cavT = WT - grow;            // cavity top edge   (top band inner edge)
+  const cavB = BY0 + grow;           // cavity bottom edge (bottom band inner edge)
+  const leftBand = cavL;             // spine band width at this layer
+  const rightBand = outerW - cavR;   // opening band width at this layer
+  const crossBand = cavT;            // top/bottom band height at this layer
+
+  // Dovetail seam centers (footprint coords).
+  const yTopBand = cavT / 2;
+  const yBotBand = (cavB + outerD) / 2;
+  const xLeftBand = cavL / 2;
+  const xRightBand = (cavR + outerW) / 2;
 
   const noFeat = () => ({ top: [], right: [], bottom: [], left: [] });
   // Inside thumb relief: a centered arc on the opening piece's cavity-facing (left) edge.
-  const innerRelief = { kind: "relief", center: outerD / 2, ...innerReliefDims(params) };
+  const innerRelief = { kind: "relief", center: outerD / 2, ...innerReliefDims(params, grow) };
   const specs = [];
 
   if (mode === "V") {
-    // Left column: full height, owns spine corners, sockets on its right edge, screws.
+    // Left column: full height, owns spine corners, sockets on its (cavity) right edge, screws.
     specs.push({
-      type: "left", outerD, x0: 0, x1: SS, y0: 0, y1: outerD,
+      type: "left", outerD, x0: 0, x1: cavL, y0: 0, y1: outerD,
       corners: { tl: sr, bl: sr, tr: 0, br: 0 }, relief: false,
       features: { ...noFeat(), right: [
-        { center: yTopBand, kind: "socket", seamLen: WT, perpWidth: SS },
-        { center: yBotBand, kind: "socket", seamLen: WT, perpWidth: SS },
+        { center: yTopBand, kind: "socket", seamLen: crossBand, perpWidth: leftBand },
+        { center: yBotBand, kind: "socket", seamLen: crossBand, perpWidth: leftBand },
       ] },
       holes: { screws: true },
     });
-    // Right column: full height, owns opening corners, sockets on its left edge, pens, relief,
-    // and (top layer) both magnets.
+    // Right column: full height, owns opening corners, sockets on its (cavity) left edge, pens,
+    // inner + outer relief, and (top layer) both magnets.
     specs.push({
-      type: "right", outerD, x0: RX0, x1: outerW, y0: 0, y1: outerD,
+      type: "right", outerD, x0: cavR, x1: outerW, y0: 0, y1: outerD,
       corners: { tr: r, br: r, tl: 0, bl: 0 }, relief: true,
       features: { ...noFeat(), left: [
-        { center: yTopBand, kind: "socket", seamLen: WT, perpWidth: BUF },
-        { center: yBotBand, kind: "socket", seamLen: WT, perpWidth: BUF },
+        { center: yTopBand, kind: "socket", seamLen: crossBand, perpWidth: rightBand },
+        { center: yBotBand, kind: "socket", seamLen: crossBand, perpWidth: rightBand },
         innerRelief,
       ] },
       holes: { pens: true, magnets: isTop ? ["tr", "br"] : [] },
     });
     // Top bar: between the columns; tails on both ends.
     specs.push({
-      type: "top", outerD, x0: SS, x1: RX0, y0: 0, y1: WT,
+      type: "top", outerD, x0: cavL, x1: cavR, y0: 0, y1: cavT,
       corners: {}, relief: false,
       features: { ...noFeat(),
-        left: [{ center: yTopBand, kind: "tail", seamLen: WT, perpWidth: SS }],
-        right: [{ center: yTopBand, kind: "tail", seamLen: WT, perpWidth: BUF }],
+        left: [{ center: yTopBand, kind: "tail", seamLen: crossBand, perpWidth: leftBand }],
+        right: [{ center: yTopBand, kind: "tail", seamLen: crossBand, perpWidth: rightBand }],
       },
       holes: {},
     });
     // Bottom bar.
     specs.push({
-      type: "bottom", outerD, x0: SS, x1: RX0, y0: BY0, y1: outerD,
+      type: "bottom", outerD, x0: cavL, x1: cavR, y0: cavB, y1: outerD,
       corners: {}, relief: false,
       features: { ...noFeat(),
-        left: [{ center: yBotBand, kind: "tail", seamLen: WT, perpWidth: SS }],
-        right: [{ center: yBotBand, kind: "tail", seamLen: WT, perpWidth: BUF }],
+        left: [{ center: yBotBand, kind: "tail", seamLen: crossBand, perpWidth: leftBand }],
+        right: [{ center: yBotBand, kind: "tail", seamLen: crossBand, perpWidth: rightBand }],
       },
       holes: {},
     });
   } else {
-    // Top bar: full width, owns top corners (tl spine, tr opening), sockets on bottom edge,
-    // and (top layer) the top-right magnet.
+    // Top bar: full width, owns top corners, sockets on its (cavity) bottom edge, magnet (tr).
     specs.push({
-      type: "top", outerD, x0: 0, x1: outerW, y0: 0, y1: WT,
+      type: "top", outerD, x0: 0, x1: outerW, y0: 0, y1: cavT,
       corners: { tl: sr, tr: r, bl: 0, br: 0 }, relief: false,
       features: { ...noFeat(), bottom: [
-        { center: xLeftBand, kind: "socket", seamLen: SS, perpWidth: WT },
-        { center: xRightBand, kind: "socket", seamLen: BUF, perpWidth: WT },
+        { center: xLeftBand, kind: "socket", seamLen: leftBand, perpWidth: crossBand },
+        { center: xRightBand, kind: "socket", seamLen: rightBand, perpWidth: crossBand },
       ] },
       holes: { magnets: isTop ? ["tr"] : [] },
     });
-    // Bottom bar: full width, owns bottom corners, sockets on top edge, bottom-right magnet.
+    // Bottom bar: full width, owns bottom corners, sockets on its (cavity) top edge, magnet (br).
     specs.push({
-      type: "bottom", outerD, x0: 0, x1: outerW, y0: BY0, y1: outerD,
+      type: "bottom", outerD, x0: 0, x1: outerW, y0: cavB, y1: outerD,
       corners: { bl: sr, br: r, tl: 0, tr: 0 }, relief: false,
       features: { ...noFeat(), top: [
-        { center: xLeftBand, kind: "socket", seamLen: SS, perpWidth: WT },
-        { center: xRightBand, kind: "socket", seamLen: BUF, perpWidth: WT },
+        { center: xLeftBand, kind: "socket", seamLen: leftBand, perpWidth: crossBand },
+        { center: xRightBand, kind: "socket", seamLen: rightBand, perpWidth: crossBand },
       ] },
       holes: { magnets: isTop ? ["br"] : [] },
     });
     // Left column: between the bars; tails top & bottom; screws.
     specs.push({
-      type: "left", outerD, x0: 0, x1: SS, y0: WT, y1: BY0,
+      type: "left", outerD, x0: 0, x1: cavL, y0: cavT, y1: cavB,
       corners: {}, relief: false,
       features: { ...noFeat(),
-        top: [{ center: xLeftBand, kind: "tail", seamLen: SS, perpWidth: WT }],
-        bottom: [{ center: xLeftBand, kind: "tail", seamLen: SS, perpWidth: WT }],
+        top: [{ center: xLeftBand, kind: "tail", seamLen: leftBand, perpWidth: crossBand }],
+        bottom: [{ center: xLeftBand, kind: "tail", seamLen: leftBand, perpWidth: crossBand }],
       },
       holes: { screws: true },
     });
-    // Right column: between the bars; tails top & bottom; pens; relief.
+    // Right column: between the bars; tails top & bottom; inner relief; pens; outer relief.
     specs.push({
-      type: "right", outerD, x0: RX0, x1: outerW, y0: WT, y1: BY0,
+      type: "right", outerD, x0: cavR, x1: outerW, y0: cavT, y1: cavB,
       corners: {}, relief: true,
       features: { ...noFeat(),
-        top: [{ center: xRightBand, kind: "tail", seamLen: BUF, perpWidth: WT }],
-        bottom: [{ center: xRightBand, kind: "tail", seamLen: BUF, perpWidth: WT }],
+        top: [{ center: xRightBand, kind: "tail", seamLen: rightBand, perpWidth: crossBand }],
+        bottom: [{ center: xRightBand, kind: "tail", seamLen: rightBand, perpWidth: crossBand }],
         left: [innerRelief],
       },
       holes: { pens: true },
@@ -297,11 +311,34 @@ function magnetCenters(params, outerW, outerD) {
 // Draw one piece's geometry (perimeter + holes + grain) into the given cut/grain groups at
 // the given footprint->draw offset. Shared by the separate-piece export and the assembled
 // preview so both stay in sync.
-function drawPiece(cut, grain, spec, params, off, { preview, outerW, outerD }) {
+function drawPiece(cut, etch, grain, spec, params, off, { preview, outerW, outerD, layerIndex }) {
   // Perimeter (single closed outline with the dovetail seams).
   componentGroup(cut, "perimeter").appendChild(
     el("path", { d: piecePathD(spec, params, off) })
   );
+
+  // Etched assembly mark (e.g. "s3"). Placed in a hole-free spot: bars use their
+  // center; columns (spine/opening) sit 25% down the full object, between the top
+  // chicago screw and the pen thumb relief. The mark is on the cut face — flip the
+  // (vertically symmetric) piece to hide it on assembly. The top layer is left
+  // unmarked since it's visible in the finished holder.
+  const isTopLayer = layerIndex === params.interiorLayerCount - 1;
+  if (layerIndex != null && !isTopLayer) {
+    const isBar = spec.type === "top" || spec.type === "bottom";
+    const shortSide = isBar ? spec.y1 - spec.y0 : spec.x1 - spec.x0;
+    const fontSize = Math.max(2.5, Math.min(5, shortSide * 0.6));
+    const lx = off.dx + (spec.x0 + spec.x1) / 2;
+    const ly = isBar
+      ? off.dy + (spec.y0 + spec.y1) / 2
+      : off.dy + outerD * 0.25;
+    const label = el("text", {
+      x: lx, y: ly,
+      "text-anchor": "middle", "dominant-baseline": "central",
+      "font-size": fontSize, "font-family": "sans-serif",
+    });
+    label.textContent = `${PIECE_ETCH[spec.type]}${layerIndex + 1}`;
+    etch.appendChild(label);
+  }
 
   // Pen pockets: two colinear rounded rectangles in the right buffer zone.
   if (spec.holes.pens) {
@@ -309,14 +346,16 @@ function drawPiece(cut, grain, spec, params, off, { preview, outerW, outerD }) {
     const pocketX = (outerW - params.openingBufferWidth / 2) - params.penPocketWidth / 2;
     const totalH = 2 * params.penPocketLength + params.penPocketGap;
     const startY = (outerD - totalH) / 2;
+    const penMargin = (params.openingBufferWidth - params.penPocketWidth) / 2;
+    const penReliefD = Math.min(params.penReliefDepth, Math.max(0, penMargin - 1));
     for (let i = 0; i < 2; i++) {
       const py = startY + i * (params.penPocketLength + params.penPocketGap);
-      pens.appendChild(kerfRoundedRect(
+      pens.appendChild(penPocketPath(
         off.dx + pocketX, off.dy + py,
         params.penPocketWidth, params.penPocketLength,
         params.kerf, "hole",
-        { tl: params.penPocketCornerRadius, tr: params.penPocketCornerRadius,
-          bl: params.penPocketCornerRadius, br: params.penPocketCornerRadius },
+        { cornerRadius: params.penPocketCornerRadius,
+          reliefH: params.penReliefHeight, reliefD: penReliefD },
       ));
     }
   }
@@ -360,13 +399,16 @@ function drawPiece(cut, grain, spec, params, off, { preview, outerW, outerD }) {
 }
 
 // One piece's SVG sized to its own bbox (for export/nesting).
-function buildOnePiece(spec, params, { preview, outerW, outerD }) {
+function buildOnePiece(spec, params, { preview, outerW, outerD, layerIndex }) {
   const bb = pieceBBox(spec, params);
   const off = { dx: PART_ORIGIN.x - bb.minX, dy: PART_ORIGIN.y - bb.minY };
-  const { svg, cut, grain } = createBedSvg(params, {
+  const { svg, cut, etch, grain } = createBedSvg(params, {
     preview, partNaturalWidth: bb.maxX - bb.minX, partNaturalHeight: bb.maxY - bb.minY,
   });
-  drawPiece(cut, grain, spec, params, off, { preview, outerW, outerD });
+  drawPiece(cut, etch, grain, spec, params, off, { preview, outerW, outerD, layerIndex });
+  // Head/foot bars run across the part; rotate their export 90deg so they nest along
+  // the bed like the spine/opening columns. (Applied on top of the global rotateOnBed.)
+  if (spec.type === "top" || spec.type === "bottom") svg.setAttribute("data-export-rotate", "90");
   return svg;
 }
 
@@ -375,71 +417,33 @@ function buildOnePiece(spec, params, { preview, outerW, outerD }) {
 export function buildInteriorLayerAssembled(params, layerIndex, { preview = true } = {}) {
   const { outerW, outerD } = outerFootprint(params);
   const { specs, isTop } = computePieceSpecs(params, layerIndex);
-  const { svg, cut, grain } = createBedSvg(params, {
+  const { svg, cut, etch, grain } = createBedSvg(params, {
     preview, partNaturalWidth: outerW, partNaturalHeight: outerD,
   });
   const off = { dx: PART_ORIGIN.x, dy: PART_ORIGIN.y };
   for (const spec of specs) {
-    drawPiece(cut, grain, spec, params, off, { preview, outerW, outerD });
+    drawPiece(cut, etch, grain, spec, params, off, { preview, outerW, outerD, layerIndex });
   }
   const suffix = isTop ? "-top" : "";
-  return { name: `interior-layer-${layerIndex + 1}${suffix}`, svg };
+  return { name: `layer-${layerIndex + 1}${suffix}`, svg };
 }
 
-// Signature distinguishing identical pieces across layers: piece role + layer parity (odd /
-// even, which fixes the frame mode) + whether it carries magnet cutouts (only the top layer
-// does). Identical signatures = identical cuts.
-function pieceSignature(spec, layerIndex) {
-  const parity = layerIndex % 2 === 0 ? "odd" : "even";
-  const mag = spec.holes.magnets && spec.holes.magnets.length ? "-magnet" : "";
-  return `${PIECE_LABEL[spec.type]}-${parity}${mag}`;
-}
-
-// Interior builder for the split case. Returns up to two assembled preview layers grouped by
-// layer-number parity (odd / even), each with a `count` of how many layers it stands for and
-// an `exports` list of its distinct cut pieces. Pieces are deduped by signature across the
-// whole stack and named with an `-xN` quantity suffix, so the zip carries no duplicate files.
+// Interior builder for the split case. Each layer is unique (per-layer cavity growth), so it
+// gets its own assembled preview card plus its 4 separate cut pieces. Pieces are named
+// {role}-{layerNumber}[-top]; layer 1 = bottom (no growth), the top layer (magnets) = highest.
 export function buildInteriorLayers(params, { preview = true } = {}) {
   const N = params.interiorLayerCount;
   const { outerW, outerD } = outerFootprint(params);
-
-  // Global tally: how many copies of each unique piece the whole stack needs.
-  const qty = new Map();
-  for (let i = 0; i < N; i++) {
-    for (const spec of computePieceSpecs(params, i).specs) {
-      const sig = pieceSignature(spec, i);
-      qty.set(sig, (qty.get(sig) || 0) + 1);
-    }
+  const layers = [];
+  for (let i = N - 1; i >= 0; i--) { // top layer first in the card list
+    const { specs, isTop } = computePieceSpecs(params, i);
+    const suffix = isTop ? "-top" : "";
+    const layer = buildInteriorLayerAssembled(params, i, { preview });
+    layer.exports = specs.map((spec) => ({
+      name: `${PIECE_LABEL[spec.type]}-${i + 1}${suffix}`,
+      svg: buildOnePiece(spec, params, { preview, outerW, outerD, layerIndex: i }),
+    }));
+    layers.push(layer);
   }
-  const exportName = (sig) => `${sig}${qty.get(sig) > 1 ? `-x${qty.get(sig)}` : ""}`;
-
-  // Group layers by layer-number parity (which fixes the frame mode).
-  const byParity = { odd: [], even: [] };
-  for (let i = 0; i < N; i++) ((i + 1) % 2 === 1 ? byParity.odd : byParity.even).push(i);
-
-  const previews = [];
-  for (const key of ["odd", "even"]) {
-    const idxs = byParity[key];
-    if (!idxs.length) continue;
-    // Preview the top variant when this parity owns it, so the magnet cutouts are shown.
-    const rep = idxs.includes(N - 1) ? N - 1 : idxs[0];
-    const layer = buildInteriorLayerAssembled(params, rep, { preview });
-    layer.name = key;
-    layer.count = idxs.length;
-
-    // Distinct cut pieces for this parity group (the magnet opening/head/foot appear here too).
-    const seen = new Set();
-    const exports = [];
-    for (const i of idxs) {
-      for (const spec of computePieceSpecs(params, i).specs) {
-        const sig = pieceSignature(spec, i);
-        if (seen.has(sig)) continue;
-        seen.add(sig);
-        exports.push({ name: exportName(sig), svg: buildOnePiece(spec, params, { preview, outerW, outerD }) });
-      }
-    }
-    layer.exports = exports;
-    previews.push(layer);
-  }
-  return previews;
+  return layers;
 }

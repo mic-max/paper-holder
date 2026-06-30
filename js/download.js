@@ -42,18 +42,24 @@ function toExportSvg(previewSvg, params) {
   clone.setAttribute("height", `${params.bedDepth}mm`);
   clone.setAttribute("viewBox", `0 0 ${params.bedWidth} ${params.bedDepth}`);
 
-  // Apply the 90° rotation (or identity) on the bed-content wrapper.
-  // Natural dimensions were stashed on the root by createBedSvg.
+  // Apply the export rotation on the bed-content wrapper. The angle combines the global
+  // rotateOnBed (90° for the long case parts) with any per-part `data-export-rotate`
+  // (e.g. head/foot bars add another 90°). Natural dims were stashed by createBedSvg;
+  // each quarter-turn needs a matching translate to keep coords in the positive quadrant.
+  const naturalW = Number(clone.getAttribute("data-natural-width")) || 0;
   const naturalH = Number(clone.getAttribute("data-natural-height")) || 0;
+  const vbW = naturalW + 20, vbH = naturalH + 20; // viewBox = natural + 2 * PART_ORIGIN margin
+  const base = params.rotateOnBed !== false ? 90 : 0;
+  const extra = Number(clone.getAttribute("data-export-rotate")) || 0;
+  const theta = ((base + extra) % 360 + 360) % 360;
   const wrapper = clone.querySelector("g.bed-content");
   if (wrapper) {
-    if (params.rotateOnBed !== false) {
-      // rotate(90) maps (x,y)->(-y,x); translate brings the rotated bbox back into
-      // positive coords with the original PART_ORIGIN margin preserved.
-      wrapper.setAttribute("transform", `translate(${naturalH + 20}, 0) rotate(90)`);
-    } else {
-      wrapper.removeAttribute("transform");
-    }
+    let transform = "";
+    if (theta === 90) transform = `translate(${vbH}, 0) rotate(90)`;       // (x,y)->(-y,x)
+    else if (theta === 180) transform = `translate(${vbW}, ${vbH}) rotate(180)`;
+    else if (theta === 270) transform = `translate(0, ${vbW}) rotate(270)`; // (x,y)->(y,-x)
+    if (transform) wrapper.setAttribute("transform", transform);
+    else wrapper.removeAttribute("transform");
   }
 
   // Strip preview-only nodes

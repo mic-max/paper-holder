@@ -21,7 +21,10 @@
       Show grain direction
     </label>
     <button id="downloadAll">Download All (zip)</button>
-    <span id="finalDims" class="topbar-item final-dims" title="Assembled W × H × thickness. Thickness = (interior layers + cover + back) × material + 2 × leather."></span>
+    <div class="topbar-right">
+      <button id="unitsToggle" title="Toggle dimension readouts between mm and inches (the design is always built in mm).">Units: mm</button>
+      <span id="finalDims" class="final-dims" title="Assembled W × H × thickness. Thickness = sum of per-layer sheet thicknesses (cover + interior layers + back) + 2 × leather."></span>
+    </div>
   </header>
   <main>
     <aside id="form" class="sidebar"></aside>
