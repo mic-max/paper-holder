@@ -78,6 +78,20 @@ export const defaults = {
   // Etched spine name: runs along the spine, centered between the screw columns.
   leatherEtch: true,
   leatherEtchText: "Joyce Carroll",
+  // Test pieces (toolbar test mode).
+  testPieceLength: 76.2,   // leather stub length; ~3 in
+  // Screw-fit gauge.
+  holeTestWidth: 25.4,     // gauge width; 1 in
+  holeTestMin: 5.8,        // smallest hole diameter
+  holeTestMax: 6.2,        // largest hole diameter
+  holeTestStep: 0.1,       // diameter increment between holes
+  holeTestSpacing: 18,     // center-to-center spacing along the gauge
+  // Magnet-fit gauge (12 mm magnet); wider strip to clear the larger holes + labels.
+  magnetTestWidth: 38.1,   // gauge width; 1.5 in
+  magnetTestMin: 11.8,
+  magnetTestMax: 12.2,
+  magnetTestStep: 0.1,
+  magnetTestSpacing: 18,
 
   // UI-only
   showGrain: false,
@@ -210,6 +224,19 @@ export const schema = [
     { key: "leatherThickness", label: "Leather thickness", unit: "mm", type: "number", step: 0.1, min: 0 },
     { key: "leatherEtch", label: "Etch name on spine", type: "checkbox" },
     { key: "leatherEtchText", label: "Spine text", type: "text" },
+  ]},
+  { group: "Test Pieces", component: null, items: [
+    { key: "testPieceLength", label: "Leather test length", unit: "mm", type: "number", step: 1, min: 10 },
+    { key: "holeTestWidth", label: "Screw gauge width", unit: "mm", type: "number", step: 0.1, min: 5 },
+    { key: "holeTestMin", label: "Screw gauge min Ø", unit: "mm", type: "number", step: 0.1, min: 0.5 },
+    { key: "holeTestMax", label: "Screw gauge max Ø", unit: "mm", type: "number", step: 0.1, min: 0.5 },
+    { key: "holeTestStep", label: "Screw gauge Ø step", unit: "mm", type: "number", step: 0.05, min: 0.05 },
+    { key: "holeTestSpacing", label: "Screw gauge spacing", unit: "mm", type: "number", step: 1, min: 5 },
+    { key: "magnetTestWidth", label: "Magnet gauge width", unit: "mm", type: "number", step: 0.1, min: 5 },
+    { key: "magnetTestMin", label: "Magnet gauge min Ø", unit: "mm", type: "number", step: 0.1, min: 0.5 },
+    { key: "magnetTestMax", label: "Magnet gauge max Ø", unit: "mm", type: "number", step: 0.1, min: 0.5 },
+    { key: "magnetTestStep", label: "Magnet gauge Ø step", unit: "mm", type: "number", step: 0.05, min: 0.05 },
+    { key: "magnetTestSpacing", label: "Magnet gauge spacing", unit: "mm", type: "number", step: 1, min: 5 },
   ]},
 ];
 

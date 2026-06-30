@@ -5,6 +5,7 @@ import { buildInteriorLayer } from "./parts/interior.js";
 import { buildInteriorLayers } from "./parts/interiorPieces.js";
 import { outerFootprint } from "./parts/geometry.js";
 import { buildLeatherSpine } from "./parts/leather.js";
+import { buildHoleGauge } from "./parts/holeTest.js";
 import { getHingeNames } from "./hinge.js";
 import { downloadPart, downloadAllZipped } from "./download.js";
 import {
@@ -40,6 +41,15 @@ const grainToggle = document.getElementById("grainToggle");
 const downloadAllBtn = document.getElementById("downloadAll");
 const finalDimsEl = document.getElementById("finalDims");
 const unitsToggle = document.getElementById("unitsToggle");
+const testToggle = document.getElementById("testToggle");
+
+// Test mode (workflow toggle, not design data): swaps the part list for small fit-check
+// pieces. Persisted separately from the profile, like the units preference.
+const TEST_KEY = "paperHolder:testMode:v1";
+let testMode = (() => {
+  try { return localStorage.getItem(TEST_KEY) === "1"; } catch { return false; }
+})();
+const testLabel = () => `Mode: ${testMode ? "Test" : "Production"}`;
 
 // Display units for the dimension readouts (the design itself is always mm). Persisted.
 const UNITS_KEY = "paperHolder:units:v1";
@@ -177,7 +187,27 @@ function buildForm() {
   }
 }
 
+// Small fit-check pieces (test mode). Currently just the leather stub: same width and
+// wrap as production, one screw row, ~3 in long — for dialing in screw/wrap fit.
+function collectTestParts() {
+  const leather = buildLeatherSpine(params, { test: true });
+  leather.thickness = params.leatherThickness;
+  const screwGauge = buildHoleGauge(params, {
+    name: "screw-hole-test",
+    width: params.holeTestWidth, min: params.holeTestMin, max: params.holeTestMax,
+    step: params.holeTestStep, spacing: params.holeTestSpacing,
+  });
+  const magnetGauge = buildHoleGauge(params, {
+    name: "magnet-hole-test",
+    width: params.magnetTestWidth, min: params.magnetTestMin, max: params.magnetTestMax,
+    step: params.magnetTestStep, spacing: params.magnetTestSpacing,
+  });
+  return [leather, screwGauge, magnetGauge];
+}
+
 function collectParts() {
+  if (testMode) return collectTestParts();
+
   const T = params.layerThicknesses; // [cover, interior 1..N, back]
   const parts = [];
 
@@ -214,6 +244,10 @@ let currentParts = [];
 // Footprint W×H matches the cover/back; thickness stacks cover + interior layers + back
 // (each one material sheet) plus the leather spine wrapping both faces (×2).
 function updateFinalDims() {
+  if (testMode) {
+    finalDimsEl.textContent = "Test mode — fit-check pieces";
+    return;
+  }
   const { outerW, outerD } = outerFootprint(params);
   const thickness = stackThickness(params) + 2 * params.leatherThickness;
   finalDimsEl.textContent =
@@ -267,6 +301,8 @@ function render() {
   repopulateProfileSelect(state.names, activeName);
   grainToggle.checked = !!params.showGrain;
   unitsToggle.textContent = `Units: ${unitLabel()}`;
+  testToggle.textContent = testLabel();
+  testToggle.classList.toggle("active", testMode);
   buildForm();
   render();
 }
@@ -283,6 +319,14 @@ unitsToggle.addEventListener("click", () => {
   unitSystem = unitSystem === "imperial" ? "metric" : "imperial";
   try { localStorage.setItem(UNITS_KEY, unitSystem); } catch {}
   unitsToggle.textContent = `Units: ${unitLabel()}`;
+  render();
+});
+
+testToggle.addEventListener("click", () => {
+  testMode = !testMode;
+  try { localStorage.setItem(TEST_KEY, testMode ? "1" : "0"); } catch {}
+  testToggle.textContent = testLabel();
+  testToggle.classList.toggle("active", testMode);
   render();
 });
 

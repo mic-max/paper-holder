@@ -14,11 +14,12 @@ import {
 import { outerFootprint, PART_ORIGIN } from "./geometry.js";
 import { stackThickness } from "../params.js";
 
-export function buildLeatherSpine(params, { preview = true } = {}) {
+export function buildLeatherSpine(params, { preview = true, test = false } = {}) {
   const { outerD } = outerFootprint(params);
   const wrapZone = stackThickness(params) + params.leatherWrapAllowance;
   const leatherWidth = 2 * params.spineSpacing + wrapZone;
-  const leatherLength = outerD;
+  // Test piece: same width to verify the wrap/screw fit, but only a short stub.
+  const leatherLength = test ? Math.max(1, params.testPieceLength) : outerD;
 
   const { svg, cut, etch } = createBedSvg(params, { preview, partNaturalWidth: leatherWidth, partNaturalHeight: leatherLength });
   const { x: ox, y: oy } = PART_ORIGIN;
@@ -37,13 +38,22 @@ export function buildLeatherSpine(params, { preview = true } = {}) {
   const holeR = params.chicagoScrewDiameter / 2;
   const screws = componentGroup(cut, "screws");
 
-  const count = Math.max(1, params.chicagoScrewCount);
-  const endInset = params.chicagoScrewEndInset;
-  const span = Math.max(0, leatherLength - 2 * endInset);
+  // Screw rows: a single centered row on the test piece (one hole per flap, so it can
+  // still be folded and screwed); the full distributed run on the production piece.
+  const cyList = [];
+  if (test) {
+    cyList.push(oy + leatherLength / 2);
+  } else {
+    const count = Math.max(1, params.chicagoScrewCount);
+    const endInset = params.chicagoScrewEndInset;
+    const span = Math.max(0, leatherLength - 2 * endInset);
+    for (let i = 0; i < count; i++) {
+      const t = count === 1 ? 0.5 : i / (count - 1);
+      cyList.push(oy + endInset + span * t);
+    }
+  }
   const headPositions = [];
-  for (let i = 0; i < count; i++) {
-    const t = count === 1 ? 0.5 : i / (count - 1);
-    const cy = oy + endInset + span * t;
+  for (const cy of cyList) {
     screws.appendChild(kerfCircle(ox + flapAx, cy, holeR, params.kerf, "hole"));
     screws.appendChild(kerfCircle(ox + flapBx, cy, holeR, params.kerf, "hole"));
     headPositions.push({ cx: ox + flapAx, cy }, { cx: ox + flapBx, cy });
@@ -56,7 +66,8 @@ export function buildLeatherSpine(params, { preview = true } = {}) {
   // Etched name: runs along the long axis (rotated 90°), centered along the length and
   // horizontally between the two screw columns (i.e. centered in the wrap zone). Height
   // tracks the plywood stack thickness (the spine depth), clamped to the wrap zone.
-  const text = String(params.leatherEtchText || "").trim();
+  // The short test stub gets a "TEST" label instead (same font/size, to trial etch settings).
+  const text = test ? "TEST" : String(params.leatherEtchText || "").trim();
   if (params.leatherEtch && text) {
     const cx = ox + leatherWidth / 2;
     const cy = oy + leatherLength / 2;
@@ -72,5 +83,5 @@ export function buildLeatherSpine(params, { preview = true } = {}) {
     etch.appendChild(label);
   }
 
-  return { name: "leather-spine", svg };
+  return { name: test ? "leather-test" : "leather-spine", svg };
 }

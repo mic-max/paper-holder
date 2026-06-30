@@ -15,6 +15,7 @@ body {
 .topbar-group { display: flex; align-items: center; gap: 6px; }
 .topbar-group label { font-size: 12px; opacity: 0.8; }
 .topbar button { padding: 6px 12px; cursor: pointer; }
+.topbar button.active { background: #163649; color: #fff; }
 .topbar select { padding: 4px 6px; }
 .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 12px; }
 .final-dims { font-weight: bold; white-space: nowrap; }
