@@ -9,7 +9,7 @@ import {
   createBedSvg, penPocketPath, kerfCircle, caseOuterPath, cavityPath,
   spineScrewPositions, addGrainOverlay, componentGroup,
 } from "../svg.js";
-import { outerFootprint, cavityRect, PART_ORIGIN, layerGrowth } from "./geometry.js";
+import { outerFootprint, cavityRect, PART_ORIGIN, layerGrowth, alignPinPositions } from "./geometry.js";
 
 export function buildInteriorLayer(params, layerIndex, { preview = true } = {}) {
   const { outerW, outerD } = outerFootprint(params);
@@ -58,7 +58,8 @@ export function buildInteriorLayer(params, layerIndex, { preview = true } = {}) 
         params.penPocketWidth, params.penPocketLength,
         params.kerf, "hole",
         { cornerRadius: params.penPocketCornerRadius,
-          reliefH: params.penReliefHeight, reliefD: penReliefD },
+          reliefH: params.penReliefHeight, reliefD: penReliefD,
+          reliefOffset: params.penReliefOffset },
       ));
     }
   }
@@ -94,6 +95,15 @@ export function buildInteriorLayer(params, layerIndex, { preview = true } = {}) 
     const br = { cx: brArc.x + d * k, cy: brArc.y + d * k };
     for (const { cx, cy } of [tr, br]) {
       magnets.appendChild(kerfCircle(ox + cx, oy + cy, magR, params.kerf, "hole"));
+    }
+  }
+
+  // Alignment-pin holes (single-frame interior gets the whole set).
+  if (params.alignPins) {
+    const { head, foot, opening } = alignPinPositions(params);
+    const pins = componentGroup(cut, "pins");
+    for (const p of [...head, ...foot, ...opening]) {
+      pins.appendChild(kerfCircle(ox + p.x, oy + p.y, params.alignPinDiameter / 2, params.kerf, "hole"));
     }
   }
 

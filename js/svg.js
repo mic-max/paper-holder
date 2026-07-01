@@ -167,10 +167,15 @@ export function penPocketPath(x, y, w, h, kerf, role = "hole", opts = {}) {
   const k = role === "outer" ? kerf / 2 : role === "hole" ? -kerf / 2 : 0;
   const X = x - k, Y = y - k, W = w + 2 * k, H = h + 2 * k;
   const cr = Math.max(0, Math.min(opts.cornerRadius || 0, Math.min(W, H) / 2));
-  const cy = Y + H / 2;
   const reliefH = Math.max(0, Math.min(opts.reliefH || 0, H - 2 * cr - 1));
   const reliefD = Math.max(0, opts.reliefD || 0);
   const on = reliefH > 0 && reliefD > 0;
+  // Relief center along the slot: shifted from mid-length toward the top of the slot
+  // (positive reliefOffset = toward the top / -y), clamped to stay between the end corners.
+  const loCy = Y + cr + reliefH / 2 + 0.5;
+  const hiCy = Y + H - cr - reliefH / 2 - 0.5;
+  let cy = Y + H / 2 - (opts.reliefOffset || 0);
+  cy = hiCy >= loCy ? Math.max(loCy, Math.min(hiCy, cy)) : Y + H / 2;
   const rr = on ? (reliefH * reliefH + 4 * reliefD * reliefD) / (8 * reliefD) : 0;
   const la = reliefD > reliefH / 2 ? 1 : 0;
   const seg = [`M ${X + cr} ${Y}`, `L ${X + W - cr} ${Y}`];

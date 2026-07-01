@@ -35,6 +35,7 @@ export const defaults = {
   penPocketGap: 30,
   penReliefHeight: 24,
   penReliefDepth: 3,
+  penReliefOffset: 0,   // shift the pen thumb relief along the slot; + = toward the top
 
   // Fasteners
   chicagoScrewCount: 3,
@@ -63,6 +64,15 @@ export const defaults = {
   // Interior
   interiorLayerCount: 3,
   interiorPocketGrowthPerLayer: 0,
+
+  // Alignment pins: 1/8" dowel holes through the interior layers + back to register the
+  // stack during glue-up. 2 per non-spine piece (head, foot, opening); the spine edge is
+  // already registered by the chicago bolts. Diameter is the nominal dowel size; inset is
+  // how far the head/foot pins sit inboard of the end dovetails.
+  alignPins: true,
+  alignPinDiameter: 3.175,
+  alignPinInset: 8,
+  alignPinOpeningOffset: 12, // opening pins' distance from part center (each side)
 
   // Interior split: build each interior layer as 4 dovetail-joined frame pieces
   // (two full-length, two between) to reduce waste and nest on smaller stock.
@@ -188,6 +198,7 @@ export const schema = [
     { key: "penPocketGap", label: "Gap between pen pockets", unit: "mm", type: "number", step: 1, min: 0 },
     { key: "penReliefHeight", label: "Pen relief height (along slot)", unit: "mm", type: "number", step: 1, min: 0 },
     { key: "penReliefDepth", label: "Pen relief depth (each side)", unit: "mm", type: "number", step: 0.5, min: 0 },
+    { key: "penReliefOffset", label: "Pen relief offset (toward top)", unit: "mm", type: "number", step: 1 },
   ]},
   { group: "Fasteners", component: "screws", items: [
     { key: "chicagoScrewCount", label: "Chicago screw count", type: "number", step: 1, min: 1 },
@@ -219,6 +230,12 @@ export const schema = [
     { key: "jointFlare", label: "Dovetail flare (per side)", unit: "mm", type: "number", step: 0.1, min: 0 },
     { key: "jointDepth", label: "Dovetail depth", unit: "mm", type: "number", step: 0.5, min: 1 },
   ]},
+  { group: "Alignment Pins", component: "pins", items: [
+    { key: "alignPins", label: "Add alignment pin holes", type: "checkbox" },
+    { key: "alignPinDiameter", label: "Pin hole Ø (dowel)", unit: "mm", type: "number", step: 0.025, min: 0.5 },
+    { key: "alignPinInset", label: "Head/foot inset from dovetail", unit: "mm", type: "number", step: 0.5, min: 1 },
+    { key: "alignPinOpeningOffset", label: "Opening pin offset from center", unit: "mm", type: "number", step: 0.5, min: 0 },
+  ]},
   { group: "Leather Spine", component: "leather", items: [
     { key: "leatherWrapAllowance", label: "Wrap allowance (beyond stack thickness)", unit: "mm", type: "number", step: 0.5, min: 0 },
     { key: "leatherThickness", label: "Leather thickness", unit: "mm", type: "number", step: 0.1, min: 0 },
@@ -249,4 +266,5 @@ export const COMPONENT_COLORS = {
   magnets:   "#00aa00",
   hinge:     "#aa00aa",
   leather:   "#8B4513",
+  pins:      "#00897b",
 };

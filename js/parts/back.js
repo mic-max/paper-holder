@@ -5,7 +5,7 @@ import {
   createBedSvg, kerfRoundedRect, kerfCircle,
   spineScrewPositions, addGrainOverlay, componentGroup,
 } from "../svg.js";
-import { outerFootprint, PART_ORIGIN } from "./geometry.js";
+import { outerFootprint, PART_ORIGIN, alignPinPositions } from "./geometry.js";
 
 export function buildBack(params, { preview = true } = {}) {
   const { outerW, outerD } = outerFootprint(params);
@@ -28,6 +28,15 @@ export function buildBack(params, { preview = true } = {}) {
     spineAxis: "left",
   })) {
     screws.appendChild(kerfCircle(cx, cy, params.chicagoScrewDiameter / 2, params.kerf, "hole"));
+  }
+
+  // Alignment-pin holes: the back carries all of them (the dowels pass through here too).
+  if (params.alignPins) {
+    const { head, foot, opening } = alignPinPositions(params);
+    const pins = componentGroup(cut, "pins");
+    for (const p of [...head, ...foot, ...opening]) {
+      pins.appendChild(kerfCircle(ox + p.x, oy + p.y, params.alignPinDiameter / 2, params.kerf, "hole"));
+    }
   }
 
   if (preview && params.showGrain) {

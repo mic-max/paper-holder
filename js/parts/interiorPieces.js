@@ -23,7 +23,7 @@ import {
   createBedSvg, penPocketPath, kerfCircle, el,
   spineScrewPositions, addGrainOverlay, componentGroup,
 } from "../svg.js";
-import { outerFootprint, PART_ORIGIN, layerGrowth } from "./geometry.js";
+import { outerFootprint, PART_ORIGIN, layerGrowth, alignPinPositions } from "./geometry.js";
 
 // Human-friendly piece names by edge role.
 const PIECE_LABEL = { left: "spine", right: "opening", top: "head", bottom: "foot" };
@@ -355,7 +355,8 @@ function drawPiece(cut, etch, grain, spec, params, off, { preview, outerW, outer
         params.penPocketWidth, params.penPocketLength,
         params.kerf, "hole",
         { cornerRadius: params.penPocketCornerRadius,
-          reliefH: params.penReliefHeight, reliefD: penReliefD },
+          reliefH: params.penReliefHeight, reliefD: penReliefD,
+          reliefOffset: params.penReliefOffset },
       ));
     }
   }
@@ -384,6 +385,19 @@ function drawPiece(cut, etch, grain, spec, params, off, { preview, outerW, outer
     const m = magnetCenters(params, outerW, outerD);
     for (const corner of spec.holes.magnets) {
       magnets.appendChild(kerfCircle(off.dx + m[corner].cx, off.dy + m[corner].cy, m.magR, params.kerf, "hole"));
+    }
+  }
+
+  // Alignment-pin holes for this piece (spine/left gets none). Positions are shared with
+  // the back and are identical on every layer so the dowels register the stack.
+  if (params.alignPins) {
+    const group = { top: "head", bottom: "foot", right: "opening" }[spec.type];
+    const list = group ? alignPinPositions(params)[group] : null;
+    if (list && list.length) {
+      const pins = componentGroup(cut, "pins");
+      for (const p of list) {
+        pins.appendChild(kerfCircle(off.dx + p.x, off.dy + p.y, params.alignPinDiameter / 2, params.kerf, "hole"));
+      }
     }
   }
 
